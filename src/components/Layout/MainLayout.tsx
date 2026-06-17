@@ -6,7 +6,6 @@ import { useStore } from '@/store/useStore';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import BottomNav from './BottomNav';
-import SplashScreen from '@/components/UI/SplashScreen';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -20,12 +19,18 @@ export default function MainLayout({ children }: MainLayoutProps) {
     if (isAuthReady && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, isAuthReady]);
+  }, [isAuthReady, isAuthenticated, router]);
 
+  // Auth hazır değilse loading
   if (!isAuthReady) {
-    return <SplashScreen />;
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
   }
 
+  // Giriş yapmamışsa hiçbir şey gösterme
   if (!isAuthenticated) {
     return null;
   }
