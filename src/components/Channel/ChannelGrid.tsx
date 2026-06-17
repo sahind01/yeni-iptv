@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useRef } from 'react';
-import type { Channel } from '@/types';
 import ChannelCard from './ChannelCard';
+import type { Channel } from '@/types';
 
 interface ChannelGridProps {
   channels: Channel[];
@@ -22,42 +21,36 @@ export default function ChannelGrid({
 }: ChannelGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // Sanal listeleme için row virtualizer
-  const rowVirtualizer = useVirtualizer({
-    count: Math.ceil(channels.length / getColumnsCount()),
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 200,
-    overscan: 5,
-  });
-
   function getColumnsCount() {
-    if (typeof window === 'undefined') return 4;
-    if (window.innerWidth < 640) return 2;  // mobil
-    if (window.innerWidth < 1024) return 3; // tablet
-    if (window.innerWidth < 1280) return 4; // küçük ekran
-    return 5; // büyük ekran
+    if (typeof window === 'undefined') return 5;
+    if (window.innerWidth < 640) return 2;
+    if (window.innerWidth < 1024) return 3;
+    if (window.innerWidth < 1280) return 4;
+    return 5;
   }
 
   const columns = getColumnsCount();
+  const totalRows = Math.ceil(channels.length / columns);
+
+  const rowVirtualizer = useVirtualizer({
+    count: totalRows,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 220,
+    overscan: 5,
+  });
 
   if (channels.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <span className="text-6xl mb-4">📺</span>
         <h3 className="text-lg font-medium text-gray-400">Kanal bulunamadı</h3>
-        <p className="text-sm text-gray-500 mt-1">
-          Farklı bir arama terimi deneyin veya kategoriyi değiştirin.
-        </p>
+        <p className="text-sm text-gray-500 mt-1">Farklı bir kategori seçin veya arama yapın.</p>
       </div>
     );
   }
 
   return (
-    <div
-      ref={parentRef}
-      className="h-full overflow-auto"
-      style={{ contain: 'strict' }}
-    >
+    <div ref={parentRef} className="h-[calc(100vh-200px)] overflow-auto">
       <div
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,
@@ -81,15 +74,18 @@ export default function ChannelGrid({
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-4">
+              <div 
+                className="grid gap-3 p-4"
+                style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
+              >
                 <AnimatePresence mode="popLayout">
-                  {rowChannels.map((channel, index) => (
+                  {rowChannels.map((channel) => (
                     <motion.div
                       key={channel.id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ delay: index * 0.05 }}
+                      transition={{ duration: 0.2 }}
                     >
                       <ChannelCard
                         channel={channel}
