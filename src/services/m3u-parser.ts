@@ -1,14 +1,4 @@
-import { Channel, EPGData } from '@/types';
-
-interface ParsedM3UItem {
-  name: string;
-  logo: string;
-  group: string;
-  url: string;
-  tvgId?: string;
-  tvgName?: string;
-  epg?: EPGData;
-}
+import { Channel } from '@/types';
 
 export class M3UParser {
   private static instance: M3UParser;
@@ -24,122 +14,93 @@ export class M3UParser {
     const channels: Channel[] = [];
     const lines = m3uContent.split('\n').map(line => line.trim());
     
-    let currentItem: Partial<ParsedM3UItem> = {};
+    console.log('M3U Parse başladı, satır sayısı:', lines.length);
+    console.log('İlk 5 satır:', lines.slice(0, 5));
+    
+    let currentChannel: Partial<Channel> = {};
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
-      // #EXTINF satırını işle
       if (line.startsWith('#EXTINF:')) {
-        currentItem = this.parseExtinfLine(line);
+        // tvg-id
+        const tvgIdMatch = line.match(/tvg-id="([^"]*)"/);
+        // tvg-name
+        const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
+        // tvg-logo
+        const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+        // group-title
+        const groupMatch = line.match(/group-title="([^"]*)"/);
+        // Kanal adı (virgülden sonrası)
+        const nameParts = line.split(',');
+        const displayName = nameParts.length > 1 ? nameParts[nameParts.length - 1].trim() : '';
+        
+        currentChannel = {
+          id: tvgIdMatch?.[1] || this.generateId(displayName || `channel_${i}`),
+          name: tvgNameMatch?.[1] || displayName || `Kanal ${i}`,
+          logo: logoMatch?.[1] || '/icons/default-channel.png',
+          group: groupMatch?.[1] || 'Diğer',
+          quality: 'SD',
+          tvgId: tvgIdMatch?.[1],
+          tvgName: tvgNameMatch?.[1],
+        };
+        
+        // Kalite tespiti
+        const name = (currentChannel.name || '').toUpperCase();
+        if (name.includes('4K') || name.includes('UHD')) currentChannel.quality = '4K';
+        else if (name.includes('FHD') || name.includes('1080')) currentChannel.quality = 'FHD';
+        else if (name.includes('HD') || name.includes('720')) currentChannel.quality = 'HD';
+        
+      } else if ((line.startsWith('http://') || line.startsWith('https://')) && currentChannel.name) {
+        currentChannel.url = line;
+        channels.push(currentChannel as Channel);
+        currentChannel = {};
       }
-      // URL satırını işle
-      else if (line.startsWith('http') || line.startsWith('https')) {
-        if (currentItem.name) {
-          const channel = this.createChannel(currentItem as ParsedM3UItem);
-          channels.push(channel);
-          currentItem = {};
-        }
-      }
-      // EPG satırını işle
-      else if (line.startsWith('#EXTVLCOPT:')) {
-        // EPG seçeneklerini işle (opsiyonel)
-      }
+    }
+    
+    console.log('Parse tamamlandı, kanal sayısı:', channels.length);
+    if (channels.length > 0) {
+      console.log('İlk kanal:', channels[0]);
     }
     
     return channels;
   }
 
-  private parseExtinfLine(line: string): Partial<ParsedM3UItem> {
-    const item: Partial<ParsedM3UItem> = {};
-    
-    // tvg-id
-    const tvgIdMatch = line.match(/tvg-id="([^"]*)"/);
-    if (tvgIdMatch) item.tvgId = tvgIdMatch[1];
-    
-    // tvg-name
-    const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
-    if (tvgNameMatch) item.tvgName = tvgNameMatch[1];
-    
-    // tvg-logo
-    const logoMatch = line.match(/tvg-logo="([^"]*)"/);
-    if (logoMatch) item.logo = logoMatch[1];
-    
-    // group-title
-    const groupMatch = line.match(/group-title="([^"]*)"/);
-    if (groupMatch) item.group = groupMatch[1];
-    
-    // Kanal adı (virgülden sonraki kısım)
-    const nameMatch = line.match(/,(.*)$/);
-    if (nameMatch) {
-      item.name = nameMatch[1].trim();
-    }
-    
-    return item;
-  }
-
-  private createChannel(item: ParsedM3UItem): Channel {
-    const name = item.tvgName || item.name || 'Bilinmeyen Kanal';
-    
-    // Kalite tespiti
-    let quality: 'SD' | 'HD' | 'FHD' | '4K' = 'SD';
-    const upperName = name.toUpperCase();
-    if (upperName.includes('4K') || upperName.includes('UHD')) {
-      quality = '4K';
-    } else if (upperName.includes('FHD') || upperName.includes('1080')) {
-      quality = 'FHD';
-    } else if (upperName.includes('HD') || upperName.includes('720')) {
-      quality = 'HD';
-    }
-    
-    return {
-      id: item.tvgId || this.generateId(name, item.url),
-      name,
-      logo: item.logo || '/icons/default-channel.png',
-      url: item.url,
-      group: item.group || 'Diğer',
-      quality,
-      tvgId: item.tvgId,
-      tvgName: item.tvgName,
-    };
-  }
-
-  private generateId(name: string, url: string): string {
-    const str = `${name}-${url}`;
-    return btoa(encodeURIComponent(str)).replace(/[/+=]/g, '_').substring(0, 32);
+  private generateId(name: string): string {
+    return btoa(encodeURIComponent(name)).replace(/[/+=]/g, '_').substring(0, 32);
   }
 
   async fetchPlaylist(username: string, password: string): Promise<Channel[]> {
-    const apiUrl = process.env.NEXT_PUBLIC_M3U_API_URL || 
-                   'https://mutlu-iptv.vercel.app/api/m3u';
+    const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+    
+    console.log('M3U API çağrılıyor:', apiUrl);
     
     try {
-      const response = await fetch(
-        `${apiUrl}?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/x-mpegurl, audio/x-mpegurl, */*',
-          },
-          cache: 'no-store', // Önbelleğe alma
-        }
-      );
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: { 'Accept': '*/*' },
+        cache: 'no-store',
+      });
+      
+      console.log('API yanıt status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`Playlist alınamadı: ${response.status}`);
+        throw new Error(`API hatası: ${response.status} ${response.statusText}`);
       }
       
       const m3uContent = await response.text();
+      console.log('M3U içerik uzunluğu:', m3uContent.length);
+      console.log('İlk 200 karakter:', m3uContent.substring(0, 200));
       
       if (!m3uContent.includes('#EXTM3U')) {
-        throw new Error('Geçersiz M3U formatı');
+        throw new Error('Geçersiz M3U formatı - #EXTM3U bulunamadı');
       }
       
       return this.parse(m3uContent);
       
-    } catch (error) {
-      console.error('M3U fetch error:', error);
-      throw new Error('Kanal listesi yüklenemedi. Lütfen bilgilerinizi kontrol edin.');
+    } catch (error: any) {
+      console.error('M3U fetch hatası:', error);
+      throw error;
     }
   }
 }
