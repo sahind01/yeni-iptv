@@ -14,6 +14,7 @@ import { CATEGORIES } from '@/utils/constants';
 import type { Channel } from '@/types';
 
 export default function LiveTVPage() {
+  const store = useStore();
   const { 
     channels, 
     setChannels,
@@ -26,23 +27,36 @@ export default function LiveTVPage() {
     userId,
     username,
     password,
-  } = useStore();
+  } = store;
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [isLoadingChannels, setIsLoadingChannels] = useState(true);
   const [showPlayer, setShowPlayer] = useState(false);
   const [error, setError] = useState('');
-  const [debug, setDebug] = useState('');
+  const [debugInfo, setDebugInfo] = useState('');
 
-  // Sayfa yüklendiğinde kanalları getir
   useEffect(() => {
+    console.log('LiveTV mounted. Store state:', {
+      username,
+      password: password ? '***var***' : 'YOK',
+      channels: channels.length,
+      isAuthenticated: store.isAuthenticated,
+    });
+    
     fetchChannels();
     loadFavorites();
   }, []);
 
   const fetchChannels = async () => {
-    if (!username || !password) {
-      setError('Kullanıcı bilgisi bulunamadı');
+    // Store'dan güncel değerleri al
+    const currentState = useStore.getState();
+    const user = currentState.username;
+    const pass = currentState.password;
+    
+    console.log('fetchChannels - user:', user, 'pass var mı:', !!pass);
+    
+    if (!user || !pass) {
+      setError(`Kullanıcı bilgisi eksik. Kullanıcı: ${user || 'YOK'}, Şifre: ${pass ? 'VAR' : 'YOK'}`);
       setIsLoadingChannels(false);
       return;
     }
@@ -50,45 +64,47 @@ export default function LiveTVPage() {
     try {
       setIsLoadingChannels(true);
       setError('');
-      setDebug('M3U çekiliyor...');
+      setDebugInfo('API çağrılıyor...');
 
-      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
-      setDebug(`API: ${apiUrl}`);
+      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+      console.log('API URL:', apiUrl);
       
       const response = await fetch(apiUrl, { cache: 'no-store' });
+      console.log('API Status:', response.status);
       
       if (!response.ok) {
         throw new Error(`API hatası: ${response.status}`);
       }
 
       const m3uContent = await response.text();
-      setDebug(`M3U alındı: ${m3uContent.substring(0, 100)}...`);
+      console.log('M3U length:', m3uContent.length);
       
       const parser = M3UParser.getInstance();
       const parsedChannels = parser.parse(m3uContent);
       
-      setDebug(`Parse edildi: ${parsedChannels.length} kanal bulundu`);
+      console.log('Parsed channels:', parsedChannels.length);
       
       if (parsedChannels.length === 0) {
-        setError('Hiç kanal bulunamadı. M3U içeriği boş olabilir.');
+        setError('Hiç kanal bulunamadı');
       } else {
         setChannels(parsedChannels);
         setFilteredChannels(parsedChannels);
-        setDebug(`✅ ${parsedChannels.length} kanal yüklendi`);
+        setDebugInfo(`${parsedChannels.length} kanal yüklendi ✅`);
       }
       
     } catch (err: any) {
-      setError(`Hata: ${err.message}`);
-      setDebug(`Hata: ${err.message}`);
+      console.error('Fetch error:', err);
+      setError(err.message);
     } finally {
       setIsLoadingChannels(false);
     }
   };
 
   const loadFavorites = async () => {
-    if (!userId) return;
+    const uid = useStore.getState().userId;
+    if (!uid) return;
     try {
-      const favList = await FirebaseService.getFavorites(userId);
+      const favList = await FirebaseService.getFavorites(uid);
       setFavorites(new Set(favList.map(f => f.channelId)));
     } catch (err) {
       console.error('Favori yükleme hatası:', err);
@@ -96,32 +112,34 @@ export default function LiveTVPage() {
   };
 
   const handleFavoriteToggle = useCallback(async (channel: Channel) => {
-    if (!userId) return;
+    const uid = useStore.getState().userId;
+    if (!uid) return;
     try {
       const isFav = favorites.has(channel.id);
       if (isFav) {
-        await FirebaseService.removeFromFavorites(userId, channel.id);
+        await FirebaseService.removeFromFavorites(uid, channel.id);
         setFavorites(prev => {
           const next = new Set(prev);
           next.delete(channel.id);
           return next;
         });
       } else {
-        await FirebaseService.addToFavorites(userId, channel);
+        await FirebaseService.addToFavorites(uid, channel);
         setFavorites(prev => new Set(prev).add(channel.id));
       }
     } catch (err) {
       console.error('Favori işlemi hatası:', err);
     }
-  }, [userId, favorites]);
+  }, [favorites]);
 
   const handleChannelSelect = useCallback(async (channel: Channel) => {
     setCurrentChannel(channel);
     setShowPlayer(true);
-    if (userId) {
-      await FirebaseService.addRecentWatch(userId, channel);
+    const uid = useStore.getState().userId;
+    if (uid) {
+      await FirebaseService.addRecentWatch(uid, channel);
     }
-  }, [userId]);
+  }, []);
 
   const categoryChannels = useMemo(() => {
     let result = searchQuery ? filteredChannels : channels;
@@ -145,31 +163,17 @@ export default function LiveTVPage() {
     setCurrentChannel(null);
   };
 
-  // Player açıkken
   if (showPlayer && currentChannel) {
     return (
       <MainLayout>
         <div className="p-4 space-y-4">
           <VideoPlayer onBack={handleBackFromPlayer} />
           {currentChannel.epg && <EPGInfo epg={currentChannel.epg} />}
-          <div className="flex items-center space-x-3">
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold">{currentChannel.name}</h2>
-              <p className="text-sm text-gray-400">{currentChannel.group}</p>
-            </div>
-            <button
-              onClick={() => handleFavoriteToggle(currentChannel)}
-              className={`p-3 rounded-xl ${favorites.has(currentChannel.id) ? 'text-red-500 bg-red-500/10' : 'text-gray-400'}`}
-            >
-              {favorites.has(currentChannel.id) ? '❤️' : '🤍'}
-            </button>
-          </div>
         </div>
       </MainLayout>
     );
   }
 
-  // Kanal listesi
   return (
     <MainLayout>
       <div className="space-y-4">
@@ -179,17 +183,19 @@ export default function LiveTVPage() {
         
         <CategoryTabs />
 
-        {/* Debug bilgisi */}
-        {debug && !error && isLoadingChannels && (
-          <div className="mx-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-            <p className="text-blue-400 text-xs">{debug}</p>
+        {/* Debug */}
+        {debugInfo && (
+          <div className="mx-4 p-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+            <p className="text-green-400 text-xs">{debugInfo}</p>
           </div>
         )}
 
         {error && (
           <div className="mx-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <p className="text-red-400 text-sm mb-3">{error}</p>
-            {debug && <p className="text-gray-500 text-xs mb-3">{debug}</p>}
+            <p className="text-red-400 text-sm mb-2">{error}</p>
+            <p className="text-gray-500 text-xs mb-3">
+              Kullanıcı: {username || 'YOK'} | Şifre: {password ? '****' : 'YOK'}
+            </p>
             <button onClick={fetchChannels} className="px-4 py-2 bg-blue-500 rounded-lg text-sm">
               Tekrar Dene
             </button>
@@ -200,13 +206,11 @@ export default function LiveTVPage() {
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4" />
             <p className="text-gray-500">Kanallar yükleniyor...</p>
-            {debug && <p className="text-gray-600 text-xs mt-2">{debug}</p>}
           </div>
-        ) : channels.length === 0 ? (
+        ) : channels.length === 0 && !error ? (
           <div className="flex flex-col items-center justify-center py-20">
             <span className="text-6xl mb-4">📡</span>
-            <h3 className="text-lg font-medium text-gray-400">Kanal bulunamadı</h3>
-            <p className="text-sm text-gray-500 mt-1">M3U listesi boş veya erişilemiyor.</p>
+            <h3 className="text-lg font-medium text-gray-400">Kanal yok</h3>
             <button onClick={fetchChannels} className="mt-4 px-6 py-2 bg-blue-500 rounded-xl text-sm">
               Kanalları Yükle
             </button>
