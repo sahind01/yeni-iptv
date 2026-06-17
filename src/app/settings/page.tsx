@@ -4,22 +4,20 @@ import { useState, useEffect } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
-import { CryptoUtils } from '@/utils/crypto';
+import type { UserSettings } from '@/types';
 import { QUALITY_OPTIONS } from '@/utils/constants';
-import { 
-  FiMoon, FiSun, FiPlay, FiTv, FiGlobe, 
-  FiLock, FiCheck, FiChevronRight 
-} from 'react-icons/fi';
+import { FiMoon, FiSun, FiPlay, FiGlobe, FiLock, FiChevronRight } from 'react-icons/fi';
 import PinModal from '@/components/UI/PinModal';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const { userId, username, site } = useStore();
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<UserSettings>({
     theme: 'dark',
     autoPlay: true,
     preferredQuality: 'auto',
     language: 'tr',
+    bufferSize: 30,
   });
   const [showPinModal, setShowPinModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -34,15 +32,15 @@ export default function SettingsPage() {
     if (!userId) return;
     const userData = await FirebaseService.getUserData(userId);
     if (userData?.settings) {
-      setSettings(userData.settings);
+      setSettings(userData.settings as UserSettings);
     }
   };
 
-  const handleSave = async (key: string, value: any) => {
+  const handleSave = async (key: keyof UserSettings, value: any) => {
     if (!userId) return;
-    
+
     setIsSaving(true);
-    const newSettings = { ...settings, [key]: value };
+    const newSettings: UserSettings = { ...settings, [key]: value };
     setSettings(newSettings);
 
     try {
@@ -50,7 +48,7 @@ export default function SettingsPage() {
       toast.success('Ayar kaydedildi');
     } catch (err) {
       toast.error('Ayar kaydedilemedi');
-      setSettings(settings); // Geri al
+      setSettings(settings);
     } finally {
       setIsSaving(false);
     }
@@ -88,20 +86,22 @@ export default function SettingsPage() {
             <div className="flex space-x-2">
               <button
                 onClick={() => handleSave('theme', 'dark')}
-                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl
-                  transition-all ${settings.theme === 'dark' 
-                    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' 
-                    : 'bg-white/5 border border-transparent hover:bg-white/10'}`}
+                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl transition-all ${
+                  settings.theme === 'dark'
+                    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                    : 'bg-white/5 border border-transparent hover:bg-white/10'
+                }`}
               >
                 <FiMoon className="w-4 h-4" />
                 <span className="text-sm">Karanlık</span>
               </button>
               <button
                 onClick={() => handleSave('theme', 'light')}
-                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl
-                  transition-all ${settings.theme === 'light' 
-                    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' 
-                    : 'bg-white/5 border border-transparent hover:bg-white/10'}`}
+                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl transition-all ${
+                  settings.theme === 'light'
+                    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                    : 'bg-white/5 border border-transparent hover:bg-white/10'
+                }`}
               >
                 <FiSun className="w-4 h-4" />
                 <span className="text-sm">Aydınlık</span>
@@ -125,9 +125,11 @@ export default function SettingsPage() {
                   settings.autoPlay ? 'bg-blue-500' : 'bg-gray-600'
                 }`}
               >
-                <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-transform ${
-                  settings.autoPlay ? 'translate-x-6' : 'translate-x-1'
-                }`} />
+                <div
+                  className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.autoPlay ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
               </button>
             </div>
           </div>
@@ -139,7 +141,7 @@ export default function SettingsPage() {
               {QUALITY_OPTIONS.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => handleSave('preferredQuality', option.value)}
+                  onClick={() => handleSave('preferredQuality', option.value as UserSettings['preferredQuality'])}
                   className={`p-3 rounded-xl text-sm transition-all ${
                     settings.preferredQuality === option.value
                       ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
@@ -164,9 +166,8 @@ export default function SettingsPage() {
               </div>
               <select
                 value={settings.language}
-                onChange={(e) => handleSave('language', e.target.value)}
-                className="bg-white/5 border border-gray-700 rounded-xl px-3 py-2 text-sm
-                  focus:outline-none focus:border-blue-500"
+                onChange={(e) => handleSave('language', e.target.value as UserSettings['language'])}
+                className="bg-white/5 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
               >
                 <option value="tr">🇹🇷 Türkçe</option>
                 <option value="en">🇬🇧 English</option>
