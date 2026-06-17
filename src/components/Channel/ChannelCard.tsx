@@ -3,17 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FiHeart } from 'react-icons/fi';
-
-interface Channel {
-  id: string;
-  name: string;
-  logo: string;
-  url: string;
-  group: string;
-  quality: string;
-  tvgId?: string;
-  tvgName?: string;
-}
+import type { Channel } from '@/types';
 
 interface ChannelCardProps {
   channel: Channel;
@@ -26,11 +16,13 @@ export default function ChannelCard({ channel, isFavorite, onSelect, onFavoriteT
   const [imageError, setImageError] = useState(false);
 
   const getQualityBadge = (quality: string) => {
-    if (quality === '4K') return 'bg-red-500 text-white';
-    if (quality === 'FHD') return 'bg-purple-500 text-white';
-    if (quality === 'HD') return 'bg-blue-500 text-white';
-    return 'bg-gray-500 text-white';
+    if (quality === '4K' || quality === 'UHD') return 'bg-red-500 text-white';
+    if (quality === 'FHD' || quality === '1080p') return 'bg-purple-500 text-white';
+    if (quality === 'HD' || quality === '720p') return 'bg-blue-500 text-white';
+    return 'bg-gray-600 text-gray-300';
   };
+
+  const showBadge = channel.quality && channel.quality !== 'SD';
 
   return (
     <motion.div
@@ -38,7 +30,7 @@ export default function ChannelCard({ channel, isFavorite, onSelect, onFavoriteT
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="bg-[#1a1a1a] rounded-xl overflow-hidden cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-gray-800/50"
+      className="bg-[#1a1a1a] rounded-xl overflow-hidden cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-gray-800/50 hover:border-gray-700/50"
       onClick={() => onSelect(channel)}
     >
       {/* Logo Alanı */}
@@ -62,7 +54,7 @@ export default function ChannelCard({ channel, isFavorite, onSelect, onFavoriteT
         )}
 
         {/* Kalite Rozeti */}
-        {channel.quality && channel.quality !== 'SD' && (
+        {showBadge && (
           <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${getQualityBadge(channel.quality)}`}>
             {channel.quality}
           </div>
