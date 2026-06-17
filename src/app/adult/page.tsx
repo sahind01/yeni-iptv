@@ -6,8 +6,8 @@ import VideoPlayer from '@/components/Player/VideoPlayer';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { CryptoUtils } from '@/utils/crypto';
-import { FiSearch, FiX, FiLock, FiCheck } from 'react-icons/fi';
-import { motion, AnimatePresence } from 'framer-motion';
+import { FiSearch, FiX, FiLock } from 'react-icons/fi';
+import { motion } from 'framer-motion';
 
 interface AdultChannel {
   id: string;
@@ -25,6 +25,7 @@ export default function AdultPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCount, setShowCount] = useState(20);
   const [selectedChannel, setSelectedChannel] = useState<AdultChannel | null>(null);
+  const [allGroups, setAllGroups] = useState<string[]>([]);
   const { setCurrentChannel, userId } = useStore();
 
   // PIN
@@ -44,7 +45,6 @@ export default function AdultPage() {
   const initPin = async () => {
     const uid = userId || useStore.getState().userId;
     if (!uid) return;
-
     const existingPin = await FirebaseService.getAdultPin(uid);
     if (existingPin) {
       setSavedPin(existingPin);
@@ -59,26 +59,17 @@ export default function AdultPage() {
       const newPin = pin + num;
       setPin(newPin);
       setPinError('');
-
       if (newPin.length === 4) {
-        if (step === 'create') {
-          saveNewPin(newPin);
-        } else {
-          verifyPin(newPin);
-        }
+        step === 'create' ? saveNewPin(newPin) : verifyPin(newPin);
       }
     }
   };
 
-  const handleDelete = () => {
-    setPin(prev => prev.slice(0, -1));
-    setPinError('');
-  };
+  const handleDelete = () => { setPin(prev => prev.slice(0, -1)); setPinError(''); };
 
   const saveNewPin = async (newPin: string) => {
     const uid = userId || useStore.getState().userId;
     if (!uid) return;
-
     const hashed = CryptoUtils.hashPin(newPin);
     await FirebaseService.setAdultPin(uid, hashed);
     setSavedPin(hashed);
@@ -96,31 +87,29 @@ export default function AdultPage() {
     }
   };
 
-  const handleResetPin = () => {
-    setStep('create');
-    setPin('');
-    setPinError('');
-    setSavedPin(null);
-  };
-
-  const handleLock = () => {
-    setStep('enter');
-    setPin('');
-    setPinError('');
-    setSelectedChannel(null);
-    setCurrentChannel(null);
-    setChannels([]);
-  };
+  const handleResetPin = () => { setStep('create'); setPin(''); setPinError(''); setSavedPin(null); };
+  const handleLock = () => { setStep('enter'); setPin(''); setPinError(''); setSelectedChannel(null); setCurrentChannel(null); setChannels([]); };
 
   const fetchChannels = async () => {
     try {
       setIsLoading(true);
+      setError('');
+      
       const response = await fetch('https://gist.githubusercontent.com/alexpekt/dc11067cd5dca6e0dd2b1ee99fd743d5/raw/da511ed0ea129dcc6490fc00a1503b237ad86b0e/IPTV_SHARED.M3U', { cache: 'no-store' });
       if (!response.ok) throw new Error('Liste alınamadı');
+      
       const text = await response.text();
       const parsed = parseM3U(text);
+      
+      console.log('Toplam kanal:', parsed.length);
+      console.log('Gruplar:', allGroups);
+      
       setChannels(parsed);
       setFilteredChannels(parsed);
+      
+      if (parsed.length === 0) {
+        setError(`Hiç adult kanal bulunamadı. M3U'daki gruplar: ${allGroups.join(', ')}`);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -130,23 +119,31 @@ export default function AdultPage() {
 
   const parseM3U = (content: string): AdultChannel[] => {
     const result: AdultChannel[] = [];
+    const groups = new Set<string>();
     const lines = content.split('\n').map(l => l.trim());
     let cur: any = {};
+
     for (const line of lines) {
       if (line.startsWith('#EXTINF:')) {
         const logo = line.match(/tvg-logo="([^"]*)"/)?.[1] || '';
-        const group = line.match(/group-title="([^"]*)"/)?.[1] || 'Adult';
+        const group = line.match(/group-title="([^"]*)"/)?.[1] || 'Diğer';
         const name = line.split(',').pop()?.trim() || 'Kanal';
-        cur = { id: `adult_${Math.random()}`, name, logo, group, url: '' };
+        
+        groups.add(group);
+        cur = { id: `adult_${Math.random().toString(36).slice(2)}`, name, logo, group, url: '' };
+        
       } else if ((line.startsWith('http://') || line.startsWith('https://')) && cur.name) {
         cur.url = line;
-        const g = (cur.group || '').toLowerCase();
-        if (g.includes('adult') || g.includes('xxx') || g.includes('18') || g.includes('erotik') || g.includes('porn')) {
-          result.push({ ...cur });
-        }
+        
+        // TÜM kanalları al (adult filtresi YOK)
+        result.push({ ...cur });
         cur = {};
       }
     }
+    
+    setAllGroups(Array.from(groups));
+    console.log('Bulunan tüm gruplar:', Array.from(groups));
+    
     return result;
   };
 
@@ -164,12 +161,10 @@ export default function AdultPage() {
   const displayed = filteredChannels.slice(0, showCount);
   const hasMore = showCount < filteredChannels.length;
 
-  // Yükleniyor
   if (step === 'loading') {
     return <MainLayout><div className="min-h-[80vh] flex items-center justify-center"><div className="w-10 h-10 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div></MainLayout>;
   }
 
-  // PIN Ekranı
   if (step === 'create' || step === 'enter') {
     return (
       <MainLayout>
@@ -178,36 +173,25 @@ export default function AdultPage() {
             <div className="w-16 h-16 bg-gradient-to-br from-red-500/20 to-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
               <FiLock className="w-8 h-8 text-red-400" />
             </div>
-            
             <h2 className="text-lg font-semibold mb-1">Yetişkin İçeriği</h2>
-            <p className="text-gray-400 text-xs mb-5">
-              {step === 'create' ? '4 haneli PIN oluşturun' : 'PIN kodunuzu girin'}
-            </p>
+            <p className="text-gray-400 text-xs mb-5">{step === 'create' ? '4 haneli PIN oluşturun' : 'PIN kodunuzu girin'}</p>
 
-            {/* PIN Noktalar */}
             <div className="flex justify-center space-x-3 mb-4">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all ${
-                  i < pin.length ? 'border-blue-500 bg-blue-500/20 scale-110' : 'border-gray-600'
-                }`}>
+              {[0,1,2,3].map(i => (
+                <div key={i} className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all ${i < pin.length ? 'border-blue-500 bg-blue-500/20 scale-110' : 'border-gray-600'}`}>
                   {i < pin.length && <div className="w-2 h-2 bg-blue-400 rounded-full" />}
                 </div>
               ))}
             </div>
 
-            {/* Hata */}
             {pinError && <p className="text-red-400 text-xs mb-3">{pinError}</p>}
 
-            {/* NumPad */}
             <div className="space-y-2 mb-4">
               {[['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']].map((row, i) => (
                 <div key={i} className="flex justify-center space-x-2">
                   {row.map((num, j) => num ? (
-                    <button
-                      key={j}
-                      onClick={() => num === '⌫' ? handleDelete() : handleNumberClick(num)}
-                      className="w-14 h-14 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-lg font-semibold transition-all"
-                    >
+                    <button key={j} onClick={() => num === '⌫' ? handleDelete() : handleNumberClick(num)}
+                      className="w-14 h-14 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-lg font-semibold transition-all">
                       {num === '⌫' ? '✕' : num}
                     </button>
                   ) : <div key={j} className="w-14 h-14" />)}
@@ -215,11 +199,8 @@ export default function AdultPage() {
               ))}
             </div>
 
-            {/* Alt Butonlar */}
             {step === 'enter' && (
-              <button onClick={handleResetPin} className="text-xs text-gray-500 hover:text-white">
-                PIN'i Sıfırla
-              </button>
+              <button onClick={handleResetPin} className="text-xs text-gray-500 hover:text-white">PIN'i Sıfırla</button>
             )}
           </div>
         </div>
@@ -227,7 +208,6 @@ export default function AdultPage() {
     );
   }
 
-  // Player
   if (selectedChannel) {
     return (
       <MainLayout>
@@ -239,7 +219,6 @@ export default function AdultPage() {
     );
   }
 
-  // Kanal Listesi
   return (
     <MainLayout>
       <div className="p-3 sm:p-4 lg:p-6">
@@ -261,7 +240,13 @@ export default function AdultPage() {
           {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1"><FiX className="w-4 h-4 text-gray-400" /></button>}
         </div>
 
-        {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl mb-4"><p className="text-red-400 text-sm">{error}</p></div>}
+        {error && (
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl mb-4">
+            <p className="text-red-400 text-sm whitespace-pre-wrap">{error}</p>
+            <button onClick={fetchChannels} className="mt-2 px-4 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs">Tekrar Dene</button>
+          </div>
+        )}
+
         {isLoading && <div className="flex justify-center py-20"><div className="w-10 h-10 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>}
 
         {!isLoading && !error && (
@@ -273,10 +258,13 @@ export default function AdultPage() {
                   onClick={() => handleChannelSelect(ch)}>
                   <div className="aspect-video bg-[#111] flex items-center justify-center p-3 relative">
                     {ch.logo ? <img src={ch.logo} alt={ch.name} className="max-w-full max-h-full object-contain" onError={e => (e.target as HTMLImageElement).style.display='none'} /> :
-                    <span className="text-2xl">🔞</span>}
+                    <div className="text-center"><span className="text-2xl block">🔞</span><span className="text-[10px] text-gray-500">{ch.group}</span></div>}
                     <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-red-500/80 rounded text-[9px]">HD</div>
                   </div>
-                  <div className="p-2"><h3 className="text-[11px] font-medium text-white truncate">{ch.name}</h3></div>
+                  <div className="p-2">
+                    <h3 className="text-[11px] font-medium text-white truncate">{ch.name}</h3>
+                    <p className="text-[9px] text-gray-500 truncate">{ch.group}</p>
+                  </div>
                 </motion.div>
               ))}
             </div>
