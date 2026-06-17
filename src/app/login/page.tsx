@@ -46,6 +46,15 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
+      // Önce M3U API'yi kontrol et
+      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(formData.username)}&password=${encodeURIComponent(formData.password)}`;
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error('Kullanıcı adı veya şifre hatalı (API)');
+      }
+
+      // Firebase Realtime Database'e kaydet/güncelle
       const userId = await FirebaseService.loginUser(
         formData.site.trim(),
         formData.username.trim(),
@@ -97,7 +106,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="glass-card p-6 space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Site</label>
+              <label className="block text-sm text-gray-400 mb-1.5">Site Adı</label>
               <div className="relative">
                 <FiServer className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input
@@ -105,7 +114,7 @@ export default function LoginPage() {
                   name="site"
                   value={formData.site}
                   onChange={handleChange}
-                  placeholder="Mutlu IPTV"
+                  placeholder="Örn: Mutlu IPTV"
                   className="input-field pl-10"
                   autoComplete="off"
                 />
@@ -176,7 +185,7 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Örnek: Site: Mutlu IPTV | Kullanıcı: Utay | Şifre: 0158</p>
+          <p>Site: Mutlu IPTV | Kullanıcı: yeni | Şifre: deneme</p>
         </div>
       </motion.div>
     </div>
