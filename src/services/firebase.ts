@@ -1,13 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
 import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  User as FirebaseUser,
-} from 'firebase/auth';
-import {
   getFirestore,
   doc,
   setDoc,
@@ -22,11 +14,9 @@ import {
   getDocs,
   addDoc,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore';
 import type { Channel, Favorite, RecentWatch, UserSettings } from '@/types';
 
-// Firebase yapılandırması
 const firebaseConfig = {
   apiKey: "AIzaSyB90dED2Kccuop75bEMKSRILimmmu5hk6Q",
   authDomain: "mutluapk-803a4.firebaseapp.com",
@@ -38,72 +28,52 @@ const firebaseConfig = {
   measurementId: "G-G7KRWJVCEE"
 };
 
-// Firebase'i başlat
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
 const db = getFirestore(app);
 
 export class FirebaseService {
-  // ==================== AUTH İŞLEMLERİ ====================
+  // ==================== BASİT AUTH (Firebase Auth Yok) ====================
 
-  static async registerUser(email: string, password: string, userData: {
-    username: string;
-    site: string;
-  }) {
+  static async loginUser(site: string, username: string, password: string) {
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      // Kullanıcıyı Firestore'dan bul
+      const userId = `${site}_${username}`.toLowerCase().replace(/\s+/g, '_');
+      const userDoc = await getDoc(doc(db, 'users', userId));
 
-      // Kullanıcı bilgilerini Firestore'a kaydet
-      await setDoc(doc(db, 'users', user.uid), {
-        username: userData.username,
-        site: userData.site,
-        email: email,
-        createdAt: serverTimestamp(),
-        lastLogin: serverTimestamp(),
-        settings: {
-          theme: 'dark',
-          autoPlay: true,
-          preferredQuality: 'auto',
-          language: 'tr',
-          bufferSize: 30,
-        },
-      });
+      if (!userDoc.exists()) {
+        // Yeni kullanıcı oluştur
+        await setDoc(doc(db, 'users', userId), {
+          username: username,
+          site: site,
+          password: password, // Gerçek projede hash'le
+          createdAt: serverTimestamp(),
+          lastLogin: serverTimestamp(),
+          settings: {
+            theme: 'dark',
+            autoPlay: true,
+            preferredQuality: 'auto',
+            language: 'tr',
+            bufferSize: 30,
+          },
+        });
+      } else {
+        // Şifre kontrolü
+        const userData = userDoc.data();
+        if (userData.password !== password) {
+          throw new Error('Hatalı şifre');
+        }
+        // Son girişi güncelle
+        await updateDoc(doc(db, 'users', userId), {
+          lastLogin: serverTimestamp(),
+        });
+      }
 
-      return user;
+      return userId;
     } catch (error: any) {
-      throw new Error(this.getErrorMessage(error.code));
+      if (error.message === 'Hatalı şifre') throw error;
+      throw new Error('Giriş yapılamadı');
     }
   }
-
-  static async loginUser(email: string, password: string) {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Son giriş zamanını güncelle
-      await updateDoc(doc(db, 'users', userCredential.user.uid), {
-        lastLogin: serverTimestamp(),
-      });
-
-      return userCredential.user;
-    } catch (error: any) {
-      throw new Error(this.getErrorMessage(error.code));
-    }
-  }
-
-  static async logoutUser() {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Çıkış hatası:', error);
-    }
-  }
-
-  static onAuthStateChange(callback: (user: FirebaseUser | null) => void) {
-    return onAuthStateChanged(auth, callback);
-  }
-
-  // ==================== KULLANICI İŞLEMLERİ ====================
 
   static async getUserData(userId: string) {
     try {
@@ -133,7 +103,6 @@ export class FirebaseService {
 
   static async addToFavorites(userId: string, channel: Channel) {
     try {
-      // Kanal URL'sini kaydetmiyoruz, sadece referans bilgileri
       const favoriteData = {
         userId,
         channelId: channel.id,
@@ -145,7 +114,6 @@ export class FirebaseService {
           quality: channel.quality,
           tvgId: channel.tvgId,
           tvgName: channel.tvgName,
-          // URL kaydedilmiyor!
         },
         addedAt: serverTimestamp(),
       };
@@ -175,22 +143,6 @@ export class FirebaseService {
     }
   }
 
-  static async isFavorite(userId: string, channelId: string): Promise<boolean> {
-    try {
-      const q = query(
-        collection(db, 'favorites'),
-        where('userId', '==', userId),
-        where('channelId', '==', channelId)
-      );
-      
-      const querySnapshot = await getDocs(q);
-      return !querySnapshot.empty;
-    } catch (error) {
-      console.error('Favori kontrolü başarısız:', error);
-      return false;
-    }
-  }
-
   static async getFavorites(userId: string): Promise<Favorite[]> {
     try {
       const q = query(
@@ -217,7 +169,6 @@ export class FirebaseService {
 
   static async addRecentWatch(userId: string, channel: Channel) {
     try {
-      // Önce aynı kanalın eski kaydını sil
       const q = query(
         collection(db, 'recentWatches'),
         where('userId', '==', userId),
@@ -229,7 +180,6 @@ export class FirebaseService {
         await deleteDoc(doc(db, 'recentWatches', document.id));
       });
 
-      // Yeni kaydı ekle (URL hariç)
       await addDoc(collection(db, 'recentWatches'), {
         userId,
         channelId: channel.id,
@@ -239,12 +189,10 @@ export class FirebaseService {
           logo: channel.logo,
           group: channel.group,
           quality: channel.quality,
-          // URL kaydedilmiyor!
         },
         watchedAt: serverTimestamp(),
       });
 
-      // Eski kayıtları temizle (20'den fazlaysa)
       await this.cleanupRecentWatches(userId);
     } catch (error) {
       console.error('Son izlenen eklenemedi:', error);
@@ -276,30 +224,27 @@ export class FirebaseService {
 
   private static async cleanupRecentWatches(userId: string) {
     try {
-      const q = query(
-        collection(db, 'recentWatches'),
-        where('userId', '==', userId),
-        orderBy('watchedAt', 'desc'),
-        limit(20)
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const keepIds = new Set<string>();
-      
-      querySnapshot.forEach((doc) => {
-        keepIds.add(doc.id);
-      });
-
-      // 20'den fazla kaydı sil
       const allDocs = await getDocs(
-        query(collection(db, 'recentWatches'), where('userId', '==', userId))
+        query(
+          collection(db, 'recentWatches'),
+          where('userId', '==', userId),
+          orderBy('watchedAt', 'desc')
+        )
       );
       
-      allDocs.forEach(async (document) => {
-        if (!keepIds.has(document.id)) {
-          await deleteDoc(doc(db, 'recentWatches', document.id));
+      let count = 0;
+      const toDelete: string[] = [];
+      
+      allDocs.forEach((doc) => {
+        count++;
+        if (count > 20) {
+          toDelete.push(doc.id);
         }
       });
+      
+      for (const id of toDelete) {
+        await deleteDoc(doc(db, 'recentWatches', id));
+      }
     } catch (error) {
       console.error('Temizleme hatası:', error);
     }
@@ -330,24 +275,6 @@ export class FirebaseService {
       return null;
     }
   }
-
-  // ==================== YARDIMCI FONKSİYONLAR ====================
-
-  private static getErrorMessage(code: string): string {
-    const errorMessages: Record<string, string> = {
-      'auth/email-already-in-use': 'Bu email adresi zaten kullanımda.',
-      'auth/invalid-email': 'Geçersiz email adresi.',
-      'auth/operation-not-allowed': 'Bu işleme izin verilmiyor.',
-      'auth/weak-password': 'Şifre çok zayıf.',
-      'auth/user-disabled': 'Bu hesap devre dışı bırakılmış.',
-      'auth/user-not-found': 'Kullanıcı bulunamadı.',
-      'auth/wrong-password': 'Hatalı şifre.',
-      'auth/invalid-credential': 'Geçersiz giriş bilgileri.',
-      'auth/too-many-requests': 'Çok fazla deneme. Lütfen daha sonra tekrar deneyin.',
-    };
-
-    return errorMessages[code] || 'Bir hata oluştu. Lütfen tekrar deneyin.';
-  }
 }
 
-export { auth, db };
+export { db };
