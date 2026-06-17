@@ -2,11 +2,12 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Channel, Category, PlayerState } from '@/types';
+import { Channel, PlayerState } from '@/types';
 
 interface AppState {
   // Auth
   isAuthenticated: boolean;
+  isAuthReady: boolean;
   userId: string | null;
   username: string | null;
   site: string | null;
@@ -36,6 +37,7 @@ interface AppState {
   login: (userId: string, username: string, site: string) => void;
   logout: () => void;
   setSessionToken: (token: string | null) => void;
+  setAuthReady: (ready: boolean) => void;
   
   // Actions - Channels
   setChannels: (channels: Channel[]) => void;
@@ -76,6 +78,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       // Initial Auth State
       isAuthenticated: false,
+      isAuthReady: false,
       userId: null,
       username: null,
       site: null,
@@ -102,6 +105,7 @@ export const useStore = create<AppState>()(
       // Auth Actions
       login: (userId, username, site) => set({
         isAuthenticated: true,
+        isAuthReady: true,
         userId,
         username,
         site,
@@ -109,6 +113,7 @@ export const useStore = create<AppState>()(
       
       logout: () => set({
         isAuthenticated: false,
+        isAuthReady: true,
         userId: null,
         username: null,
         site: null,
@@ -119,6 +124,7 @@ export const useStore = create<AppState>()(
       }),
       
       setSessionToken: (token) => set({ sessionToken: token }),
+      setAuthReady: (ready) => set({ isAuthReady: ready }),
       
       // Channel Actions
       setChannels: (channels) => set({ channels }),
@@ -154,15 +160,12 @@ export const useStore = create<AppState>()(
       name: 'mutlu-player-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        // Sadece güvenli verileri sakla
         isAuthenticated: state.isAuthenticated,
         userId: state.userId,
         username: state.username,
         site: state.site,
         sessionToken: state.sessionToken,
         activeCategory: state.activeCategory,
-        // Kanal URL'lerini saklamıyoruz!
-        // channels: state.channels, // BUNU SAKLAMIYORUZ!
       }),
     }
   )
