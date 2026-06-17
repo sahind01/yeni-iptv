@@ -5,12 +5,11 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { FiUser, FiLock, FiServer, FiEye, FiEyeOff } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
-import { useAuth } from '@/hooks/useAuth';
+import { FirebaseService } from '@/services/firebase';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated } = useStore();
-  const { login, error: authError } = useAuth();
+  const { isAuthenticated, login: storeLogin, setAuthReady } = useStore();
   
   const [formData, setFormData] = useState({
     site: '',
@@ -21,7 +20,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Zaten giriş yapılmışsa dashboard'a yönlendir
   useEffect(() => {
     if (isAuthenticated) {
       router.push('/dashboard');
@@ -32,7 +30,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     
-    // Validasyon
     if (!formData.site.trim()) {
       setError('Site adı gerekli');
       return;
@@ -49,12 +46,16 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Firebase Auth için email formatı: username@site.com
-      const email = `${formData.username.toLowerCase()}@${formData.site.toLowerCase().replace(/\s+/g, '')}.com`;
+      const userId = await FirebaseService.loginUser(
+        formData.site.trim(),
+        formData.username.trim(),
+        formData.password.trim()
+      );
       
-      await login(email, formData.password);
+      storeLogin(userId, formData.username.trim(), formData.site.trim());
+      setAuthReady(true);
+      router.push('/dashboard');
       
-      // Başarılı giriş - yönlendirme useAuth içinde yapılıyor
     } catch (err: any) {
       setError(err.message || 'Giriş başarısız');
     } finally {
@@ -63,10 +64,7 @@ export default function LoginPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
   };
 
@@ -78,7 +76,6 @@ export default function LoginPage() {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md"
       >
-        {/* Logo ve Başlık */}
         <div className="text-center mb-8">
           <motion.div
             initial={{ scale: 0 }}
@@ -97,10 +94,8 @@ export default function LoginPage() {
           <p className="text-gray-400 mt-2">Premium IPTV Deneyimi</p>
         </div>
 
-        {/* Giriş Formu */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="glass-card p-6 space-y-4">
-            {/* Site Adı */}
             <div>
               <label className="block text-sm text-gray-400 mb-1.5">Site</label>
               <div className="relative">
@@ -117,7 +112,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Kullanıcı Adı */}
             <div>
               <label className="block text-sm text-gray-400 mb-1.5">Kullanıcı Adı</label>
               <div className="relative">
@@ -134,7 +128,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Şifre */}
             <div>
               <label className="block text-sm text-gray-400 mb-1.5">Şifre</label>
               <div className="relative">
@@ -158,18 +151,16 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Hata Mesajı */}
-            {(error || authError) && (
+            {error && (
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm"
               >
-                {error || authError}
+                {error}
               </motion.div>
             )}
 
-            {/* Giriş Butonu */}
             <button
               type="submit"
               disabled={isLoading}
@@ -184,7 +175,6 @@ export default function LoginPage() {
           </div>
         </form>
 
-        {/* Örnek Bilgiler */}
         <div className="mt-6 text-center text-sm text-gray-500">
           <p>Örnek: Site: Mutlu IPTV | Kullanıcı: Utay | Şifre: 0158</p>
         </div>
