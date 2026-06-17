@@ -9,9 +9,8 @@ import { CryptoUtils } from '@/utils/crypto';
 
 export function useAuth() {
   const router = useRouter();
-  const { login, logout, setSessionToken, setChannels, setLoading } = useStore();
+  const { login, logout, setSessionToken, setChannels, setLoading, setAuthReady } = useStore();
   const [error, setError] = useState<string | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
 
   // Auth durumunu dinle
   useEffect(() => {
@@ -20,21 +19,18 @@ export function useAuth() {
         const userData = await FirebaseService.getUserData(firebaseUser.uid);
         if (userData) {
           login(firebaseUser.uid, userData.username, userData.site);
-          
-          // Session token oluştur
           const sessionToken = CryptoUtils.generateSessionToken(firebaseUser.uid);
           setSessionToken(sessionToken);
         }
       } else {
         logout();
       }
-      setIsAuthReady(true);
+      setAuthReady(true);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Kayıt olma
   const register = useCallback(async (
     email: string,
     password: string,
@@ -45,14 +41,10 @@ export function useAuth() {
     setError(null);
     
     try {
-      const user = await FirebaseService.registerUser(email, password, {
-        username,
-        site,
-      });
-      
+      const user = await FirebaseService.registerUser(email, password, { username, site });
       login(user.uid, username, site);
+      setAuthReady(true);
       router.push('/dashboard');
-      
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -60,11 +52,7 @@ export function useAuth() {
     }
   }, []);
 
-  // Giriş yapma
-  const handleLogin = useCallback(async (
-    email: string,
-    password: string
-  ) => {
+  const handleLogin = useCallback(async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     
@@ -77,13 +65,11 @@ export function useAuth() {
       }
       
       login(user.uid, userData.username, userData.site);
-      
-      // Session token oluştur
       const sessionToken = CryptoUtils.generateSessionToken(user.uid);
       setSessionToken(sessionToken);
+      setAuthReady(true);
       
       router.push('/dashboard');
-      
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -91,18 +77,17 @@ export function useAuth() {
     }
   }, []);
 
-  // Çıkış yapma
   const handleLogout = useCallback(async () => {
     try {
       await FirebaseService.logoutUser();
       logout();
+      setAuthReady(true);
       router.push('/login');
     } catch (err) {
       console.error('Çıkış hatası:', err);
     }
   }, []);
 
-  // Kanal listesini yükleme
   const loadChannels = useCallback(async (username: string, password: string) => {
     setLoading(true);
     
@@ -121,7 +106,6 @@ export function useAuth() {
 
   return {
     error,
-    isAuthReady,
     register,
     login: handleLogin,
     logout: handleLogout,
