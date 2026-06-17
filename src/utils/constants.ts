@@ -17,11 +17,11 @@ export const QUALITY_OPTIONS = [
   { value: '720p', label: '720p HD' },
   { value: '480p', label: '480p SD' },
   { value: '360p', label: '360p' },
-];
+] as const;
 
 export const MAX_RECENT_WATCHES = 20;
 export const MAX_PIN_ATTEMPTS = 3;
-export const PIN_LOCK_DURATION = 30000; // 30 saniye
+export const PIN_LOCK_DURATION = 30000;
 export const RECONNECT_MAX_ATTEMPTS = 5;
 export const RECONNECT_BASE_DELAY = 2000;
 
