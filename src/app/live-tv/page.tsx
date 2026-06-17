@@ -26,39 +26,60 @@ export default function LiveTVPage() {
     userId,
     username,
     password,
-    setLoading,
   } = useStore();
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(true);
   const [showPlayer, setShowPlayer] = useState(false);
   const [error, setError] = useState('');
+  const [debug, setDebug] = useState('');
 
-  // Kanalları yükle
+  // Sayfa yüklendiğinde kanalları getir
   useEffect(() => {
-    if (channels.length === 0 && username && password) {
-      loadChannels();
-    } else if (channels.length > 0) {
-      setFilteredChannels(channels);
-    }
+    fetchChannels();
     loadFavorites();
   }, []);
 
-  const loadChannels = async () => {
-    if (!username || !password) return;
-    
+  const fetchChannels = async () => {
+    if (!username || !password) {
+      setError('Kullanıcı bilgisi bulunamadı');
+      setIsLoadingChannels(false);
+      return;
+    }
+
     try {
       setIsLoadingChannels(true);
       setError('');
+      setDebug('M3U çekiliyor...');
+
+      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+      setDebug(`API: ${apiUrl}`);
+      
+      const response = await fetch(apiUrl, { cache: 'no-store' });
+      
+      if (!response.ok) {
+        throw new Error(`API hatası: ${response.status}`);
+      }
+
+      const m3uContent = await response.text();
+      setDebug(`M3U alındı: ${m3uContent.substring(0, 100)}...`);
       
       const parser = M3UParser.getInstance();
-      const channelList = await parser.fetchPlaylist(username, password);
+      const parsedChannels = parser.parse(m3uContent);
       
-      setChannels(channelList);
-      setFilteredChannels(channelList);
+      setDebug(`Parse edildi: ${parsedChannels.length} kanal bulundu`);
+      
+      if (parsedChannels.length === 0) {
+        setError('Hiç kanal bulunamadı. M3U içeriği boş olabilir.');
+      } else {
+        setChannels(parsedChannels);
+        setFilteredChannels(parsedChannels);
+        setDebug(`✅ ${parsedChannels.length} kanal yüklendi`);
+      }
       
     } catch (err: any) {
-      setError(err.message || 'Kanallar yüklenemedi');
+      setError(`Hata: ${err.message}`);
+      setDebug(`Hata: ${err.message}`);
     } finally {
       setIsLoadingChannels(false);
     }
@@ -124,17 +145,31 @@ export default function LiveTVPage() {
     setCurrentChannel(null);
   };
 
+  // Player açıkken
   if (showPlayer && currentChannel) {
     return (
       <MainLayout>
         <div className="p-4 space-y-4">
           <VideoPlayer onBack={handleBackFromPlayer} />
           {currentChannel.epg && <EPGInfo epg={currentChannel.epg} />}
+          <div className="flex items-center space-x-3">
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold">{currentChannel.name}</h2>
+              <p className="text-sm text-gray-400">{currentChannel.group}</p>
+            </div>
+            <button
+              onClick={() => handleFavoriteToggle(currentChannel)}
+              className={`p-3 rounded-xl ${favorites.has(currentChannel.id) ? 'text-red-500 bg-red-500/10' : 'text-gray-400'}`}
+            >
+              {favorites.has(currentChannel.id) ? '❤️' : '🤍'}
+            </button>
+          </div>
         </div>
       </MainLayout>
     );
   }
 
+  // Kanal listesi
   return (
     <MainLayout>
       <div className="space-y-4">
@@ -144,10 +179,18 @@ export default function LiveTVPage() {
         
         <CategoryTabs />
 
+        {/* Debug bilgisi */}
+        {debug && !error && isLoadingChannels && (
+          <div className="mx-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+            <p className="text-blue-400 text-xs">{debug}</p>
+          </div>
+        )}
+
         {error && (
           <div className="mx-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
             <p className="text-red-400 text-sm mb-3">{error}</p>
-            <button onClick={loadChannels} className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm">
+            {debug && <p className="text-gray-500 text-xs mb-3">{debug}</p>}
+            <button onClick={fetchChannels} className="px-4 py-2 bg-blue-500 rounded-lg text-sm">
               Tekrar Dene
             </button>
           </div>
@@ -157,6 +200,16 @@ export default function LiveTVPage() {
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4" />
             <p className="text-gray-500">Kanallar yükleniyor...</p>
+            {debug && <p className="text-gray-600 text-xs mt-2">{debug}</p>}
+          </div>
+        ) : channels.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <span className="text-6xl mb-4">📡</span>
+            <h3 className="text-lg font-medium text-gray-400">Kanal bulunamadı</h3>
+            <p className="text-sm text-gray-500 mt-1">M3U listesi boş veya erişilemiyor.</p>
+            <button onClick={fetchChannels} className="mt-4 px-6 py-2 bg-blue-500 rounded-xl text-sm">
+              Kanalları Yükle
+            </button>
           </div>
         ) : (
           <ChannelGrid
