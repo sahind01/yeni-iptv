@@ -1,20 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc,
-  deleteDoc,
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDocs,
-  addDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { getDatabase, ref, get, set, update, remove, push, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
 import type { Channel, Favorite, RecentWatch, UserSettings } from '@/types';
 
 const firebaseConfig = {
@@ -29,57 +14,59 @@ const firebaseConfig = {
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
+const db = getDatabase(app);
 
 export class FirebaseService {
-  // ==================== BASİT AUTH (Firebase Auth Yok) ====================
-
+  
+  // ==================== KULLANICI GİRİŞ (Realtime Database) ====================
+  
   static async loginUser(site: string, username: string, password: string) {
     try {
-      // Kullanıcıyı Firestore'dan bul
+      // users/{userId} yolundan kullanıcıyı kontrol et
       const userId = `${site}_${username}`.toLowerCase().replace(/\s+/g, '_');
-      const userDoc = await getDoc(doc(db, 'users', userId));
+      const userRef = ref(db, `users/${userId}`);
+      const snapshot = await get(userRef);
 
-      if (!userDoc.exists()) {
+      if (!snapshot.exists()) {
         // Yeni kullanıcı oluştur
-        await setDoc(doc(db, 'users', userId), {
+        await set(userRef, {
           username: username,
           site: site,
-          password: password, // Gerçek projede hash'le
-          createdAt: serverTimestamp(),
-          lastLogin: serverTimestamp(),
+          password: password,
+          createdAt: Date.now(),
+          lastLogin: Date.now(),
           settings: {
             theme: 'dark',
             autoPlay: true,
             preferredQuality: 'auto',
             language: 'tr',
             bufferSize: 30,
-          },
+          }
         });
       } else {
         // Şifre kontrolü
-        const userData = userDoc.data();
+        const userData = snapshot.val();
         if (userData.password !== password) {
           throw new Error('Hatalı şifre');
         }
         // Son girişi güncelle
-        await updateDoc(doc(db, 'users', userId), {
-          lastLogin: serverTimestamp(),
-        });
+        await update(userRef, { lastLogin: Date.now() });
       }
 
       return userId;
     } catch (error: any) {
       if (error.message === 'Hatalı şifre') throw error;
-      throw new Error('Giriş yapılamadı');
+      throw new Error('Giriş yapılamadı: ' + error.message);
     }
   }
 
   static async getUserData(userId: string) {
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        return userDoc.data();
+      const userRef = ref(db, `users/${userId}`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        return snapshot.val();
       }
       return null;
     } catch (error) {
@@ -90,9 +77,8 @@ export class FirebaseService {
 
   static async updateUserSettings(userId: string, settings: Partial<UserSettings>) {
     try {
-      await updateDoc(doc(db, 'users', userId), {
-        settings: settings,
-      });
+      const settingsRef = ref(db, `users/${userId}/settings`);
+      await update(settingsRef, settings);
     } catch (error) {
       console.error('Ayarlar güncellenemedi:', error);
       throw error;
@@ -103,8 +89,9 @@ export class FirebaseService {
 
   static async addToFavorites(userId: string, channel: Channel) {
     try {
-      const favoriteData = {
-        userId,
+      const favRef = ref(db, `favorites/${userId}/${channel.id}`);
+      
+      await set(favRef, {
         channelId: channel.id,
         channel: {
           id: channel.id,
@@ -112,13 +99,11 @@ export class FirebaseService {
           logo: channel.logo,
           group: channel.group,
           quality: channel.quality,
-          tvgId: channel.tvgId,
-          tvgName: channel.tvgName,
+          tvgId: channel.tvgId || '',
+          tvgName: channel.tvgName || '',
         },
-        addedAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, 'favorites'), favoriteData);
+        addedAt: Date.now(),
+      });
     } catch (error) {
       console.error('Favori eklenemedi:', error);
       throw error;
@@ -127,16 +112,8 @@ export class FirebaseService {
 
   static async removeFromFavorites(userId: string, channelId: string) {
     try {
-      const q = query(
-        collection(db, 'favorites'),
-        where('userId', '==', userId),
-        where('channelId', '==', channelId)
-      );
-      
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach(async (document) => {
-        await deleteDoc(doc(db, 'favorites', document.id));
-      });
+      const favRef = ref(db, `favorites/${userId}/${channelId}`);
+      await remove(favRef);
     } catch (error) {
       console.error('Favori silinemedi:', error);
       throw error;
@@ -145,18 +122,22 @@ export class FirebaseService {
 
   static async getFavorites(userId: string): Promise<Favorite[]> {
     try {
-      const q = query(
-        collection(db, 'favorites'),
-        where('userId', '==', userId),
-        orderBy('addedAt', 'desc')
-      );
+      const favRef = ref(db, `favorites/${userId}`);
+      const snapshot = await get(favRef);
       
-      const querySnapshot = await getDocs(q);
-      const favorites: Favorite[] = [];
+      if (!snapshot.exists()) return [];
       
-      querySnapshot.forEach((doc) => {
-        favorites.push({ id: doc.id, ...doc.data() } as Favorite);
-      });
+      const data = snapshot.val();
+      const favorites: Favorite[] = Object.entries(data).map(([key, value]: [string, any]) => ({
+        id: key,
+        userId: userId,
+        channelId: value.channelId,
+        channel: value.channel,
+        addedAt: value.addedAt,
+      }));
+      
+      // Tarihe göre sırala (en yeni önce)
+      favorites.sort((a, b) => b.addedAt - a.addedAt);
       
       return favorites;
     } catch (error) {
@@ -169,19 +150,9 @@ export class FirebaseService {
 
   static async addRecentWatch(userId: string, channel: Channel) {
     try {
-      const q = query(
-        collection(db, 'recentWatches'),
-        where('userId', '==', userId),
-        where('channelId', '==', channel.id)
-      );
+      const recentRef = ref(db, `recentWatches/${userId}/${channel.id}`);
       
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach(async (document) => {
-        await deleteDoc(doc(db, 'recentWatches', document.id));
-      });
-
-      await addDoc(collection(db, 'recentWatches'), {
-        userId,
+      await set(recentRef, {
         channelId: channel.id,
         channel: {
           id: channel.id,
@@ -190,9 +161,10 @@ export class FirebaseService {
           group: channel.group,
           quality: channel.quality,
         },
-        watchedAt: serverTimestamp(),
+        watchedAt: Date.now(),
       });
 
+      // Eski kayıtları temizle
       await this.cleanupRecentWatches(userId);
     } catch (error) {
       console.error('Son izlenen eklenemedi:', error);
@@ -201,21 +173,24 @@ export class FirebaseService {
 
   static async getRecentWatches(userId: string): Promise<RecentWatch[]> {
     try {
-      const q = query(
-        collection(db, 'recentWatches'),
-        where('userId', '==', userId),
-        orderBy('watchedAt', 'desc'),
-        limit(20)
-      );
+      const recentRef = ref(db, `recentWatches/${userId}`);
+      const snapshot = await get(recentRef);
       
-      const querySnapshot = await getDocs(q);
-      const recentWatches: RecentWatch[] = [];
+      if (!snapshot.exists()) return [];
       
-      querySnapshot.forEach((doc) => {
-        recentWatches.push({ id: doc.id, ...doc.data() } as RecentWatch);
-      });
+      const data = snapshot.val();
+      const recentWatches: RecentWatch[] = Object.entries(data).map(([key, value]: [string, any]) => ({
+        id: key,
+        userId: userId,
+        channel: value.channel,
+        watchedAt: value.watchedAt,
+      }));
       
-      return recentWatches;
+      // Tarihe göre sırala (en yeni önce)
+      recentWatches.sort((a, b) => b.watchedAt - a.watchedAt);
+      
+      // Sadece son 20
+      return recentWatches.slice(0, 20);
     } catch (error) {
       console.error('Son izlenenler alınamadı:', error);
       return [];
@@ -224,26 +199,22 @@ export class FirebaseService {
 
   private static async cleanupRecentWatches(userId: string) {
     try {
-      const allDocs = await getDocs(
-        query(
-          collection(db, 'recentWatches'),
-          where('userId', '==', userId),
-          orderBy('watchedAt', 'desc')
-        )
-      );
+      const recentRef = ref(db, `recentWatches/${userId}`);
+      const snapshot = await get(recentRef);
       
-      let count = 0;
-      const toDelete: string[] = [];
+      if (!snapshot.exists()) return;
       
-      allDocs.forEach((doc) => {
-        count++;
-        if (count > 20) {
-          toDelete.push(doc.id);
+      const data = snapshot.val();
+      const entries = Object.entries(data) as [string, { watchedAt: number }][];
+      
+      // 20'den fazlaysa en eskileri sil
+      if (entries.length > 20) {
+        entries.sort((a, b) => b[1].watchedAt - a[1].watchedAt);
+        const toDelete = entries.slice(20);
+        
+        for (const [key] of toDelete) {
+          await remove(ref(db, `recentWatches/${userId}/${key}`));
         }
-      });
-      
-      for (const id of toDelete) {
-        await deleteDoc(doc(db, 'recentWatches', id));
       }
     } catch (error) {
       console.error('Temizleme hatası:', error);
@@ -254,7 +225,7 @@ export class FirebaseService {
 
   static async setAdultPin(userId: string, hashedPin: string) {
     try {
-      await updateDoc(doc(db, 'users', userId), {
+      await update(ref(db, `users/${userId}`), {
         adultPin: hashedPin,
       });
     } catch (error) {
@@ -265,9 +236,11 @@ export class FirebaseService {
 
   static async getAdultPin(userId: string): Promise<string | null> {
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        return userDoc.data().adultPin || null;
+      const userRef = ref(db, `users/${userId}/adultPin`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        return snapshot.val();
       }
       return null;
     } catch (error) {
@@ -275,6 +248,11 @@ export class FirebaseService {
       return null;
     }
   }
+
+  // ==================== KANAL LİSTESİ (M3U'DAN) ====================
+
+  // NOT: Kanal URL'leri Firebase'de SAKLANMAZ!
+  // Sadece M3U API'den alınır ve memory'de tutulur.
 }
 
 export { db };
