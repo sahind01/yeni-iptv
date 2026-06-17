@@ -1,0 +1,36 @@
+{
+  "name": "mutlu-player",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "firebase": "^10.12.0",
+    "hls.js": "^1.5.0",
+    "video.js": "^8.10.0",
+    "react-icons": "^5.0.0",
+    "framer-motion": "^11.0.0",
+    "zustand": "^4.5.0",
+    "@tanstack/react-virtual": "^3.0.0",
+    "crypto-js": "^4.2.0",
+    "react-hot-toast": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/crypto-js": "^4.2.0",
+    "@types/video.js": "^7.3.0",
+    "typescript": "^5.0.0",
+    "tailwindcss": "^3.4.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^15.0.0"
+  }
+}
