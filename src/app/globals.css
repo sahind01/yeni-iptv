@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========== TEMEL STİLLER ========== */
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-[#0a0a0a] text-white antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-blue-500/30 text-white;
+  }
+}
+
+/* ========== BİLEŞEN STİLLERİ ========== */
+@layer components {
+  /* Kanal Kartı */
+  .channel-card {
+    @apply relative bg-[#1a1a1a] rounded-xl overflow-hidden cursor-pointer
+           transition-all duration-300 hover:bg-[#252525] hover:scale-[1.02]
+           active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+
+  .channel-card.tv-focused {
+    @apply ring-2 ring-blue-500 scale-[1.02] bg-[#252525];
+  }
+
+  /* Buton Stilleri */
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium
+           px-6 py-3 rounded-xl transition-all duration-200
+           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 text-white font-medium
+           px-6 py-3 rounded-xl transition-all duration-200
+           active:scale-95;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-lg hover:bg-white/10 transition-colors
+           focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+
+  /* Input Stilleri */
+  .input-field {
+    @apply w-full bg-[#1a1a1a] border border-gray-700 rounded-xl
+           px-4 py-3 text-white placeholder-gray-500
+           focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+           transition-all duration-200;
+  }
+
+  /* Kart Stilleri */
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent;
+  }
+
+  /* Badge */
+  .quality-badge {
+    @apply absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase;
+  }
+
+  .quality-HD {
+    @apply bg-blue-500/80 text-white;
+  }
+
+  .quality-FHD {
+    @apply bg-purple-500/80 text-white;
+  }
+
+  .quality-4K {
+    @apply bg-red-500/80 text-white;
+  }
+}
+
+/* ========== ANİMASYONLAR ========== */
+@layer utilities {
+  /* Slide animasyonları */
+  .animate-slide-in-left {
+    animation: slideInLeft 0.3s ease-out;
+  }
+
+  .animate-slide-in-right {
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  .animate-slide-in-up {
+    animation: slideInUp 0.3s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  /* Pulse animasyonu */
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+/* Keyframes */
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ========== MOBİL DOKUNMATİK ========== */
+@media (hover: none) and (pointer: coarse) {
+  .channel-card:hover {
+    transform: none;
+  }
+  
+  .channel-card:active {
+    transform: scale(0.97);
+  }
+}
+
+/* ========== TV ODAK STİLLERİ ========== */
+@media (min-width: 1280px) {
+  .tv-layout {
+    @apply max-w-[1920px] mx-auto;
+  }
+}
+
+/* ========== PWA STİLLERİ ========== */
+@media (display-mode: standalone) {
+  .pwa-safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .pwa-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ========== LOADING EKRANI ========== */
+.splash-screen {
+  @apply fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0a0a];
+}
