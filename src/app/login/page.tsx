@@ -6,25 +6,36 @@ import { motion } from 'framer-motion';
 import { FiUser, FiLock, FiServer, FiEye, FiEyeOff } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
+import { M3UParser } from '@/services/m3u-parser';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated, login: storeLogin, setAuthReady } = useStore();
+  const { 
+    isAuthenticated, 
+    isAuthReady,
+    login: storeLogin, 
+    setChannels,
+    setAuthReady,
+    username: savedUser,
+    site: savedSite,
+    password: savedPass,
+  } = useStore();
   
   const [formData, setFormData] = useState({
-    site: '',
-    username: '',
-    password: '',
+    site: savedSite || '',
+    username: savedUser || '',
+    password: savedPass || '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Zaten giriş yapılmışsa dashboard'a git
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthReady && isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated]);
+  }, [isAuthReady, isAuthenticated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,23 +57,37 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Önce M3U API'yi kontrol et
+      // 1. M3U API'yi kontrol et
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(formData.username)}&password=${encodeURIComponent(formData.password)}`;
       const response = await fetch(apiUrl);
       
       if (!response.ok) {
-        throw new Error('Kullanıcı adı veya şifre hatalı (API)');
+        throw new Error('Kullanıcı adı veya şifre hatalı');
       }
 
-      // Firebase Realtime Database'e kaydet/güncelle
+      const m3uContent = await response.text();
+      
+      if (!m3uContent.includes('#EXTM3U')) {
+        throw new Error('Geçersiz M3U yanıtı');
+      }
+
+      // 2. Firebase'e kaydet
       const userId = await FirebaseService.loginUser(
         formData.site.trim(),
         formData.username.trim(),
         formData.password.trim()
       );
+
+      // 3. Kanalları parse et ve store'a kaydet
+      const parser = M3UParser.getInstance();
+      const channels = parser.parse(m3uContent);
       
-      storeLogin(userId, formData.username.trim(), formData.site.trim());
+      // 4. Store'a kaydet
+      storeLogin(userId, formData.username, formData.site, formData.password);
+      setChannels(channels);
       setAuthReady(true);
+      
+      // 5. Dashboard'a git
       router.push('/dashboard');
       
     } catch (err: any) {
@@ -77,6 +102,15 @@ export default function LoginPage() {
     setError('');
   };
 
+  // Yükleniyor
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-4">
       <motion.div
@@ -86,14 +120,9 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-          >
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center">
             <span className="text-3xl">📺</span>
-          </motion.div>
+          </div>
           
           <h1 className="text-3xl font-bold">
             <span className="bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
@@ -161,13 +190,9 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm"
-              >
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">
                 {error}
-              </motion.div>
+              </div>
             )}
 
             <button
