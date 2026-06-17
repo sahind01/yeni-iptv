@@ -29,22 +29,19 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [debug, setDebug] = useState('');
 
-  // Zaten giriş yapılmışsa dashboard'a git
   useEffect(() => {
     if (isAuthReady && isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [isAuthReady, isAuthenticated]);
+  }, [isAuthReady, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setDebug('');
     
-    if (!formData.site.trim()) {
-      setError('Site adı gerekli');
-      return;
-    }
     if (!formData.username.trim()) {
       setError('Kullanıcı adı gerekli');
       return;
@@ -57,41 +54,52 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // 1. M3U API'yi kontrol et
-      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(formData.username)}&password=${encodeURIComponent(formData.password)}`;
+      const username = formData.username.trim();
+      const password = formData.password.trim();
+      const site = formData.site.trim() || 'IPTV';
+      
+      setDebug('API çağrılıyor...');
+      
+      // M3U API
+      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
+      
+      setDebug(`API yanıt: ${response.status}`);
       
       if (!response.ok) {
         throw new Error('Kullanıcı adı veya şifre hatalı');
       }
 
       const m3uContent = await response.text();
+      setDebug(`M3U alındı: ${m3uContent.length} karakter`);
       
       if (!m3uContent.includes('#EXTM3U')) {
         throw new Error('Geçersiz M3U yanıtı');
       }
 
-      // 2. Firebase'e kaydet
-      const userId = await FirebaseService.loginUser(
-        formData.site.trim(),
-        formData.username.trim(),
-        formData.password.trim()
-      );
+      // Firebase
+      const userId = await FirebaseService.loginUser(site, username, password);
+      setDebug(`Firebase userId: ${userId}`);
 
-      // 3. Kanalları parse et ve store'a kaydet
+      // Parse kanallar
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
-      
-      // 4. Store'a kaydet
-      storeLogin(userId, formData.username, formData.site, formData.password);
+      setDebug(`${channels.length} kanal bulundu`);
+
+      // STORE'A KAYDET - PASSWORD DAHİL
+      storeLogin(userId, username, site, password);
       setChannels(channels);
       setAuthReady(true);
       
-      // 5. Dashboard'a git
-      router.push('/dashboard');
+      setDebug('Başarılı, yönlendiriliyor...');
+      
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 300);
       
     } catch (err: any) {
-      setError(err.message || 'Giriş başarısız');
+      setError(err.message);
+      setDebug(`Hata: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -102,7 +110,6 @@ export default function LoginPage() {
     setError('');
   };
 
-  // Yükleniyor
   if (!isAuthReady) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -123,7 +130,6 @@ export default function LoginPage() {
           <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center">
             <span className="text-3xl">📺</span>
           </div>
-          
           <h1 className="text-3xl font-bold">
             <span className="bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
               Mutlu Player
@@ -135,7 +141,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="glass-card p-6 space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Site Adı</label>
+              <label className="block text-sm text-gray-400 mb-1.5">Site (Opsiyonel)</label>
               <div className="relative">
                 <FiServer className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input
@@ -143,7 +149,7 @@ export default function LoginPage() {
                   name="site"
                   value={formData.site}
                   onChange={handleChange}
-                  placeholder="Örn: Mutlu IPTV"
+                  placeholder="Mutlu IPTV"
                   className="input-field pl-10"
                   autoComplete="off"
                 />
@@ -189,6 +195,12 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {debug && !error && (
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-2">
+                <p className="text-blue-400 text-xs">{debug}</p>
+              </div>
+            )}
+
             {error && (
               <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">
                 {error}
@@ -208,10 +220,6 @@ export default function LoginPage() {
             </button>
           </div>
         </form>
-
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Site: Mutlu IPTV | Kullanıcı: yeni | Şifre: deneme</p>
-        </div>
       </motion.div>
     </div>
   );
