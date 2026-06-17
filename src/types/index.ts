@@ -46,7 +46,6 @@ export interface EPGData {
   };
 }
 
-// Favori ve geçmiş tipleri
 export interface Favorite {
   id?: string;
   userId: string;
@@ -63,7 +62,6 @@ export interface RecentWatch {
   duration?: number;
 }
 
-// Kategori tipi
 export interface Category {
   id: string;
   name: string;
@@ -71,21 +69,19 @@ export interface Category {
   channelCount: number;
 }
 
-// Pin doğrulama tipi
 export interface PinAttempt {
   count: number;
   lastAttempt: number;
   lockedUntil: number;
 }
 
-// API yanıt tipleri
 export interface M3UResponse {
   success: boolean;
   data?: string;
   error?: string;
 }
 
-// Player state tipleri
+// Player state tipi
 export interface PlayerState {
   isPlaying: boolean;
   isMuted: boolean;
