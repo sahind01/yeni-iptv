@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, get, set, update, remove, push, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
+import { getDatabase, ref, get, set, update, remove } from 'firebase/database';
 import type { Channel, Favorite, RecentWatch, UserSettings } from '@/types';
 
 const firebaseConfig = {
@@ -16,14 +16,33 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getDatabase(app);
 
+// Firebase path için geçersiz karakterleri temizle
+function sanitizePath(str: string): string {
+  return str
+    .replace(/[.#$\[\]]/g, '_')  // Geçersiz karakterleri _ ile değiştir
+    .replace(/\/+/g, '_')         // Slash'leri _ ile değiştir
+    .replace(/^https?_/, '')      // http/https kaldır
+    .replace(/:/g, '')            // : kaldır
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')         // Boşlukları _ ile değiştir
+    .replace(/_+/g, '_')          // Birden fazla _ tek yap
+    .replace(/^_|_$/g, '');       // Baştaki/sondaki _ temizle
+}
+
 export class FirebaseService {
   
-  // ==================== KULLANICI GİRİŞ (Realtime Database) ====================
+  // ==================== KULLANICI GİRİŞ ====================
   
   static async loginUser(site: string, username: string, password: string) {
     try {
-      // users/{userId} yolundan kullanıcıyı kontrol et
-      const userId = `${site}_${username}`.toLowerCase().replace(/\s+/g, '_');
+      // Site adını temizle
+      const cleanSite = sanitizePath(site);
+      const cleanUsername = sanitizePath(username);
+      const userId = `${cleanSite}_${cleanUsername}`;
+      
+      console.log('Temizlenmiş userId:', userId); // Debug için
+      
       const userRef = ref(db, `users/${userId}`);
       const snapshot = await get(userRef);
 
@@ -56,6 +75,7 @@ export class FirebaseService {
       return userId;
     } catch (error: any) {
       if (error.message === 'Hatalı şifre') throw error;
+      console.error('Login error:', error);
       throw new Error('Giriş yapılamadı: ' + error.message);
     }
   }
@@ -89,7 +109,8 @@ export class FirebaseService {
 
   static async addToFavorites(userId: string, channel: Channel) {
     try {
-      const favRef = ref(db, `favorites/${userId}/${channel.id}`);
+      const channelId = sanitizePath(channel.id);
+      const favRef = ref(db, `favorites/${userId}/${channelId}`);
       
       await set(favRef, {
         channelId: channel.id,
@@ -99,8 +120,6 @@ export class FirebaseService {
           logo: channel.logo,
           group: channel.group,
           quality: channel.quality,
-          tvgId: channel.tvgId || '',
-          tvgName: channel.tvgName || '',
         },
         addedAt: Date.now(),
       });
@@ -112,7 +131,8 @@ export class FirebaseService {
 
   static async removeFromFavorites(userId: string, channelId: string) {
     try {
-      const favRef = ref(db, `favorites/${userId}/${channelId}`);
+      const cleanId = sanitizePath(channelId);
+      const favRef = ref(db, `favorites/${userId}/${cleanId}`);
       await remove(favRef);
     } catch (error) {
       console.error('Favori silinemedi:', error);
@@ -136,9 +156,7 @@ export class FirebaseService {
         addedAt: value.addedAt,
       }));
       
-      // Tarihe göre sırala (en yeni önce)
       favorites.sort((a, b) => b.addedAt - a.addedAt);
-      
       return favorites;
     } catch (error) {
       console.error('Favoriler alınamadı:', error);
@@ -150,7 +168,8 @@ export class FirebaseService {
 
   static async addRecentWatch(userId: string, channel: Channel) {
     try {
-      const recentRef = ref(db, `recentWatches/${userId}/${channel.id}`);
+      const channelId = sanitizePath(channel.id);
+      const recentRef = ref(db, `recentWatches/${userId}/${channelId}`);
       
       await set(recentRef, {
         channelId: channel.id,
@@ -164,7 +183,6 @@ export class FirebaseService {
         watchedAt: Date.now(),
       });
 
-      // Eski kayıtları temizle
       await this.cleanupRecentWatches(userId);
     } catch (error) {
       console.error('Son izlenen eklenemedi:', error);
@@ -186,10 +204,7 @@ export class FirebaseService {
         watchedAt: value.watchedAt,
       }));
       
-      // Tarihe göre sırala (en yeni önce)
       recentWatches.sort((a, b) => b.watchedAt - a.watchedAt);
-      
-      // Sadece son 20
       return recentWatches.slice(0, 20);
     } catch (error) {
       console.error('Son izlenenler alınamadı:', error);
@@ -207,7 +222,6 @@ export class FirebaseService {
       const data = snapshot.val();
       const entries = Object.entries(data) as [string, { watchedAt: number }][];
       
-      // 20'den fazlaysa en eskileri sil
       if (entries.length > 20) {
         entries.sort((a, b) => b[1].watchedAt - a[1].watchedAt);
         const toDelete = entries.slice(20);
@@ -221,13 +235,11 @@ export class FirebaseService {
     }
   }
 
-  // ==================== ADULT PIN İŞLEMLERİ ====================
+  // ==================== ADULT PIN ====================
 
   static async setAdultPin(userId: string, hashedPin: string) {
     try {
-      await update(ref(db, `users/${userId}`), {
-        adultPin: hashedPin,
-      });
+      await update(ref(db, `users/${userId}`), { adultPin: hashedPin });
     } catch (error) {
       console.error('PIN ayarlanamadı:', error);
       throw error;
@@ -248,11 +260,6 @@ export class FirebaseService {
       return null;
     }
   }
-
-  // ==================== KANAL LİSTESİ (M3U'DAN) ====================
-
-  // NOT: Kanal URL'leri Firebase'de SAKLANMAZ!
-  // Sadece M3U API'den alınır ve memory'de tutulur.
 }
 
 export { db };
