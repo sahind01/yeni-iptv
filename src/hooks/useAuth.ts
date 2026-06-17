@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { FirebaseService } from '@/services/firebase';
 import { useStore } from '@/store/useStore';
+import { FirebaseService } from '@/services/firebase';
 import { M3UParser } from '@/services/m3u-parser';
 
 export function useAuth() {
@@ -16,42 +16,49 @@ export function useAuth() {
     setError(null);
     
     try {
+      // M3U API kontrolü
+      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error('Kullanıcı adı veya şifre hatalı');
+      }
+
+      const m3uContent = await response.text();
+      
+      if (!m3uContent.includes('#EXTM3U')) {
+        throw new Error('Geçersiz M3U yanıtı');
+      }
+
+      // Firebase'e kaydet
       const userId = await FirebaseService.loginUser(site, username, password);
-      login(userId, username, site);
+
+      // Kanalları parse et
+      const parser = M3UParser.getInstance();
+      const channels = parser.parse(m3uContent);
+      setChannels(channels);
+
+      // Store'a kaydet (4 parametre)
+      login(userId, username, site, password);
       setAuthReady(true);
       router.push('/dashboard');
+      
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [login, setChannels, setLoading, setAuthReady, router]);
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = useCallback(() => {
     storeLogout();
     setAuthReady(true);
     router.push('/login');
-  }, []);
-
-  const loadChannels = useCallback(async (username: string, password: string) => {
-    setLoading(true);
-    try {
-      const parser = M3UParser.getInstance();
-      const channels = await parser.fetchPlaylist(username, password);
-      setChannels(channels);
-      return channels;
-    } catch (err: any) {
-      setError(err.message);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  }, [storeLogout, setAuthReady, router]);
 
   return {
     error,
     login: handleLogin,
     logout: handleLogout,
-    loadChannels,
   };
 }
