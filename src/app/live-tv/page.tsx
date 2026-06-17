@@ -10,7 +10,6 @@ import EPGInfo from '@/components/Channel/EPGInfo';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { M3UParser } from '@/services/m3u-parser';
-import { CATEGORIES } from '@/utils/constants';
 import type { Channel } from '@/types';
 
 export default function LiveTVPage() {
@@ -36,27 +35,17 @@ export default function LiveTVPage() {
   const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
-    console.log('LiveTV mounted. Store state:', {
-      username,
-      password: password ? '***var***' : 'YOK',
-      channels: channels.length,
-      isAuthenticated: store.isAuthenticated,
-    });
-    
     fetchChannels();
     loadFavorites();
   }, []);
 
   const fetchChannels = async () => {
-    // Store'dan güncel değerleri al
     const currentState = useStore.getState();
     const user = currentState.username;
     const pass = currentState.password;
     
-    console.log('fetchChannels - user:', user, 'pass var mı:', !!pass);
-    
     if (!user || !pass) {
-      setError(`Kullanıcı bilgisi eksik. Kullanıcı: ${user || 'YOK'}, Şifre: ${pass ? 'VAR' : 'YOK'}`);
+      setError(`Kullanıcı bilgisi eksik. Lütfen tekrar giriş yapın.`);
       setIsLoadingChannels(false);
       return;
     }
@@ -64,25 +53,17 @@ export default function LiveTVPage() {
     try {
       setIsLoadingChannels(true);
       setError('');
-      setDebugInfo('API çağrılıyor...');
 
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
-      console.log('API URL:', apiUrl);
-      
       const response = await fetch(apiUrl, { cache: 'no-store' });
-      console.log('API Status:', response.status);
       
       if (!response.ok) {
         throw new Error(`API hatası: ${response.status}`);
       }
 
       const m3uContent = await response.text();
-      console.log('M3U length:', m3uContent.length);
-      
       const parser = M3UParser.getInstance();
       const parsedChannels = parser.parse(m3uContent);
-      
-      console.log('Parsed channels:', parsedChannels.length);
       
       if (parsedChannels.length === 0) {
         setError('Hiç kanal bulunamadı');
@@ -93,7 +74,6 @@ export default function LiveTVPage() {
       }
       
     } catch (err: any) {
-      console.error('Fetch error:', err);
       setError(err.message);
     } finally {
       setIsLoadingChannels(false);
@@ -141,22 +121,29 @@ export default function LiveTVPage() {
     }
   }, []);
 
+  // Arama filtresi
+  const searchFilteredChannels = useMemo(() => {
+    if (!searchQuery.trim()) return channels;
+    const query = searchQuery.toLowerCase().trim();
+    return channels.filter(ch => 
+      ch.name.toLowerCase().includes(query) ||
+      (ch.group || '').toLowerCase().includes(query)
+    );
+  }, [channels, searchQuery]);
+
+  // Kategori filtresi
   const categoryChannels = useMemo(() => {
-    let result = searchQuery ? filteredChannels : channels;
-    
-    if (activeCategory !== 'all') {
-      const category = CATEGORIES.find(c => c.id === activeCategory);
-      if (category) {
-        const catName = category.name.toLowerCase();
-        result = result.filter(channel => {
-          const group = (channel.group || '').toLowerCase();
-          return group.includes(catName) || group.includes(activeCategory);
-        });
-      }
+    let result = searchFilteredChannels;
+
+    if (activeCategory && activeCategory !== 'all') {
+      result = result.filter(channel => {
+        const groupKey = (channel.group || 'diger').toLowerCase().replace(/\s+/g, '_');
+        return groupKey === activeCategory;
+      });
     }
-    
+
     return result;
-  }, [channels, filteredChannels, activeCategory, searchQuery]);
+  }, [searchFilteredChannels, activeCategory]);
 
   const handleBackFromPlayer = () => {
     setShowPlayer(false);
@@ -169,6 +156,18 @@ export default function LiveTVPage() {
         <div className="p-4 space-y-4">
           <VideoPlayer onBack={handleBackFromPlayer} />
           {currentChannel.epg && <EPGInfo epg={currentChannel.epg} />}
+          <div className="flex items-center space-x-3">
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold">{currentChannel.name}</h2>
+              <p className="text-sm text-gray-400">{currentChannel.group}</p>
+            </div>
+            <button
+              onClick={() => handleFavoriteToggle(currentChannel)}
+              className={`p-3 rounded-xl text-xl ${favorites.has(currentChannel.id) ? 'text-red-500' : 'text-gray-500'}`}
+            >
+              {favorites.has(currentChannel.id) ? '❤️' : '🤍'}
+            </button>
+          </div>
         </div>
       </MainLayout>
     );
@@ -176,26 +175,22 @@ export default function LiveTVPage() {
 
   return (
     <MainLayout>
-      <div className="space-y-4">
+      <div className="space-y-2">
         <div className="hidden lg:block px-4 pt-4">
           <SearchBar />
         </div>
         
         <CategoryTabs />
 
-        {/* Debug */}
-        {debugInfo && (
-          <div className="mx-4 p-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+        {debugInfo && !error && (
+          <div className="mx-4 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-lg">
             <p className="text-green-400 text-xs">{debugInfo}</p>
           </div>
         )}
 
         {error && (
           <div className="mx-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <p className="text-red-400 text-sm mb-2">{error}</p>
-            <p className="text-gray-500 text-xs mb-3">
-              Kullanıcı: {username || 'YOK'} | Şifre: {password ? '****' : 'YOK'}
-            </p>
+            <p className="text-red-400 text-sm mb-3">{error}</p>
             <button onClick={fetchChannels} className="px-4 py-2 bg-blue-500 rounded-lg text-sm">
               Tekrar Dene
             </button>
@@ -210,18 +205,25 @@ export default function LiveTVPage() {
         ) : channels.length === 0 && !error ? (
           <div className="flex flex-col items-center justify-center py-20">
             <span className="text-6xl mb-4">📡</span>
-            <h3 className="text-lg font-medium text-gray-400">Kanal yok</h3>
+            <h3 className="text-lg font-medium text-gray-400">Kanal bulunamadı</h3>
             <button onClick={fetchChannels} className="mt-4 px-6 py-2 bg-blue-500 rounded-xl text-sm">
               Kanalları Yükle
             </button>
           </div>
         ) : (
-          <ChannelGrid
-            channels={categoryChannels}
-            favorites={favorites}
-            onChannelSelect={handleChannelSelect}
-            onFavoriteToggle={handleFavoriteToggle}
-          />
+          <>
+            {categoryChannels.length === 0 && searchQuery && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">"{searchQuery}" için sonuç bulunamadı</p>
+              </div>
+            )}
+            <ChannelGrid
+              channels={categoryChannels}
+              favorites={favorites}
+              onChannelSelect={handleChannelSelect}
+              onFavoriteToggle={handleFavoriteToggle}
+            />
+          </>
         )}
       </div>
     </MainLayout>
