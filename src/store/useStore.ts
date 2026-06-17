@@ -61,7 +61,7 @@ export const useStore = create<AppState>()(
   persist(
     (set) => ({
       isAuthenticated: false,
-      isAuthReady: true, // Başlangıçta true, auth kontrolü bitti demek
+      isAuthReady: true,
       userId: null,
       username: null,
       site: null,
@@ -82,14 +82,17 @@ export const useStore = create<AppState>()(
       
       playerState: { ...initialPlayerState },
       
-      login: (userId, username, site, password) => set({
-        isAuthenticated: true,
-        isAuthReady: true,
-        userId,
-        username,
-        site,
-        password,
-      }),
+      login: (userId, username, site, password) => {
+        console.log('STORE LOGIN:', { userId, username, site, password: '***' });
+        set({
+          isAuthenticated: true,
+          isAuthReady: true,
+          userId,
+          username,
+          site,
+          password,
+        });
+      },
       
       logout: () => set({
         isAuthenticated: false,
@@ -123,6 +126,7 @@ export const useStore = create<AppState>()(
     {
       name: 'mutlu-player-storage',
       storage: createJSONStorage(() => localStorage),
+      // PASSWORD'Ü DE SAKLA!
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
         isAuthReady: state.isAuthReady,
