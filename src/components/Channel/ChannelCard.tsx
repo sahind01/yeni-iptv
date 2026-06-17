@@ -15,61 +15,56 @@ interface ChannelCardProps {
 export default function ChannelCard({ channel, isFavorite, onSelect, onFavoriteToggle }: ChannelCardProps) {
   const [imageError, setImageError] = useState(false);
 
-  const getQualityBadge = (quality: string) => {
-    if (quality === '4K' || quality === 'UHD') return 'bg-red-500 text-white';
-    if (quality === 'FHD' || quality === '1080p') return 'bg-purple-500 text-white';
-    if (quality === 'HD' || quality === '720p') return 'bg-blue-500 text-white';
-    return 'bg-gray-600 text-gray-300';
-  };
-
-  const showBadge = channel.quality && channel.quality !== 'SD';
+  const qualityBadge = channel.quality && channel.quality !== 'SD' ? channel.quality : null;
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.9 }}
+      initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="bg-[#1a1a1a] rounded-xl overflow-hidden cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-gray-800/50 hover:border-gray-700/50"
+      className="bg-[#1a1a1a] rounded-lg overflow-hidden cursor-pointer 
+        hover:bg-[#222] active:scale-[0.98] transition-all duration-150
+        border border-gray-800/30"
       onClick={() => onSelect(channel)}
     >
-      {/* Logo Alanı */}
-      <div className="relative aspect-video bg-[#111] flex items-center justify-center p-4">
-        {!imageError && channel.logo && channel.logo !== '/icons/default-channel.png' ? (
+      {/* Logo */}
+      <div className="relative aspect-video bg-[#111] flex items-center justify-center p-2 sm:p-3">
+        {!imageError && channel.logo && !channel.logo.includes('default-channel') ? (
           <img
             src={channel.logo}
             alt={channel.name}
-            className="max-w-full max-h-full object-contain"
+            className="w-full h-full object-contain"
             onError={() => setImageError(true)}
             loading="lazy"
           />
         ) : (
-          <div className="text-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-blue-500/20 to-purple-600/20 rounded-full flex items-center justify-center mx-auto">
-              <span className="text-xl font-bold text-gray-400">
-                {channel.name?.charAt(0)?.toUpperCase() || '📺'}
-              </span>
-            </div>
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500/20 to-purple-600/20 rounded-full flex items-center justify-center">
+            <span className="text-sm sm:text-base font-bold text-gray-500">
+              {channel.name?.charAt(0)?.toUpperCase() || '📺'}
+            </span>
           </div>
         )}
 
-        {/* Kalite Rozeti */}
-        {showBadge && (
-          <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${getQualityBadge(channel.quality)}`}>
-            {channel.quality}
+        {/* Kalite Rozeti - Küçük */}
+        {qualityBadge && (
+          <div className={`absolute top-1 right-1 px-1 py-0.5 rounded text-[8px] sm:text-[10px] font-bold
+            ${qualityBadge === '4K' ? 'bg-red-500/90' : 
+              qualityBadge === 'FHD' ? 'bg-purple-500/90' : 'bg-blue-500/90'} text-white`}>
+            {qualityBadge}
           </div>
         )}
       </div>
 
-      {/* Kanal Bilgisi */}
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
+      {/* Bilgi */}
+      <div className="p-2 sm:p-2.5">
+        <div className="flex items-start justify-between gap-1">
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-medium text-white truncate">
-              {channel.name || 'Bilinmeyen Kanal'}
+            <h3 className="text-[11px] sm:text-xs font-medium text-white truncate leading-tight">
+              {channel.name || 'Kanal'}
             </h3>
-            <p className="text-xs text-gray-500 truncate mt-0.5">
-              {channel.group || 'Diğer'}
+            <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">
+              {channel.group || ''}
             </p>
           </div>
 
@@ -78,11 +73,11 @@ export default function ChannelCard({ channel, isFavorite, onSelect, onFavoriteT
               e.stopPropagation();
               onFavoriteToggle(channel);
             }}
-            className={`flex-shrink-0 p-1.5 rounded-lg transition-all ${
-              isFavorite ? 'text-red-500 bg-red-500/10' : 'text-gray-600 hover:text-red-500 hover:bg-red-500/5'
+            className={`flex-shrink-0 p-0.5 rounded transition-all ${
+              isFavorite ? 'text-red-500' : 'text-gray-600 hover:text-red-400'
             }`}
           >
-            <FiHeart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+            <FiHeart className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
           </button>
         </div>
       </div>
