@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
+import VideoPlayer from '@/components/Player/VideoPlayer';
 import { useStore } from '@/store/useStore';
 import { FiFilm, FiSearch, FiX } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,8 +23,7 @@ export default function MoviesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCount, setShowCount] = useState(20);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const { username, password } = useStore();
+  const { username, password, setCurrentChannel } = useStore();
 
   useEffect(() => {
     fetchMovies();
@@ -53,7 +53,6 @@ export default function MoviesPage() {
       setIsLoading(true);
       setError('');
 
-      // GitHub'dan M3U çek
       const response = await fetch('https://raw.githubusercontent.com/kimbumuratyavuz/capcanli/refs/heads/main/fullhd.m3u', {
         cache: 'no-store'
       });
@@ -99,7 +98,6 @@ export default function MoviesPage() {
         };
       } else if ((line.startsWith('http://') || line.startsWith('https://')) && current.name) {
         current.url = line;
-        // Sadece film grubundakileri al
         const group = (current.group || '').toLowerCase();
         if (group.includes('film') || group.includes('movie') || group.includes('sinema')) {
           movies.push(current as Movie);
@@ -112,21 +110,21 @@ export default function MoviesPage() {
   };
 
   const handleMovieSelect = (movie: Movie) => {
+    // Live TV'deki gibi store'a channel olarak set et
+    setCurrentChannel({
+      id: movie.id,
+      name: movie.name,
+      logo: movie.logo,
+      url: movie.url,
+      group: movie.group,
+      quality: 'HD',
+    });
     setSelectedMovie(movie);
-    setTimeout(() => {
-      if (videoRef.current) {
-        videoRef.current.src = movie.url;
-        videoRef.current.play().catch(() => {});
-      }
-    }, 100);
   };
 
-  const handleBack = () => {
+  const handleBackFromPlayer = () => {
     setSelectedMovie(null);
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.src = '';
-    }
+    setCurrentChannel(null);
   };
 
   const loadMore = () => {
@@ -135,6 +133,23 @@ export default function MoviesPage() {
 
   const displayedMovies = filteredMovies.slice(0, showCount);
   const hasMore = showCount < filteredMovies.length;
+
+  // Player açıkken
+  if (selectedMovie) {
+    return (
+      <MainLayout>
+        <div className="p-3 sm:p-4 space-y-4">
+          <VideoPlayer onBack={handleBackFromPlayer} />
+          <div className="flex items-center space-x-3">
+            <div className="flex-1">
+              <h2 className="text-base sm:text-lg font-semibold">{selectedMovie.name}</h2>
+              <p className="text-xs sm:text-sm text-gray-400">{selectedMovie.group}</p>
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -217,13 +232,17 @@ export default function MoviesPage() {
                           loading="lazy"
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
-                            (e.target as HTMLImageElement).parentElement!.classList.add('no-poster');
+                            const parent = (e.target as HTMLImageElement).parentElement;
+                            if (parent) {
+                              const fallback = parent.querySelector('.fallback-icon') as HTMLElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }
                           }}
                         />
                       ) : null}
-                      <div className={`${movie.logo ? 'hidden' : ''} no-poster flex flex-col items-center`}>
+                      <div className={`fallback-icon ${movie.logo ? 'hidden' : 'flex'} flex-col items-center`}>
                         <span className="text-3xl sm:text-4xl mb-2">🎬</span>
-                        <span className="text-xs text-gray-500 text-center px-2 line-clamp-2">
+                        <span className="text-[10px] sm:text-xs text-gray-500 text-center px-2 line-clamp-2">
                           {movie.name}
                         </span>
                       </div>
@@ -271,52 +290,6 @@ export default function MoviesPage() {
           </>
         )}
       </div>
-
-      {/* Film Player Modal */}
-      <AnimatePresence>
-        {selectedMovie && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black"
-          >
-            {/* Header */}
-            <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/90 to-transparent z-10">
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={handleBack}
-                  className="p-2 hover:bg-white/10 rounded-lg text-sm"
-                >
-                  ← Geri
-                </button>
-                <div>
-                  <h2 className="text-sm font-medium">{selectedMovie.name}</h2>
-                  <p className="text-xs text-gray-400">{selectedMovie.group}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Video */}
-            <video
-              ref={videoRef}
-              className="w-full h-full object-contain"
-              controls
-              autoPlay
-              playsInline
-            />
-
-            {/* Kapat */}
-            <button
-              onClick={handleBack}
-              className="absolute bottom-6 left-1/2 -translate-x-1/2 px-6 py-2 bg-white/10 
-                backdrop-blur rounded-full text-sm hover:bg-white/20 transition-colors z-10"
-            >
-              Kapat
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </MainLayout>
   );
 }
