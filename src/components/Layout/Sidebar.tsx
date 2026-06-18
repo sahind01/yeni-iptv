@@ -6,8 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiHome, FiTv, FiFilm, FiMonitor, 
   FiHeart, FiClock, FiSettings, FiLogOut,
-  FiX, FiShield, FiMessageCircle, FiUser, 
-  FiInfo, FiLock, FiSend
+  FiX, FiShield, FiMessageCircle,
+  FiInfo, FiLock, FiSend, FiHelpCircle
 } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,8 +24,9 @@ const menuItems = [
 ];
 
 const extraLinks = [
-  { id: 'telegram', label: 'Telegram Grubu', icon: FiSend, href: 'https://t.me/digitaltivi', external: true },
-  { id: 'admin', label: 'Admin İletişim', icon: FiMessageCircle, href: 'https://t.me/mutflixadmin', external: true },
+  { id: 'nasil', label: 'Nasıl Kullanılır?', icon: FiHelpCircle, path: '/nasil-kullanilir' },
+  { id: 'telegram', label: 'Telegram Grubu', icon: FiSend, href: 'https://t.me/mutluiptv', external: true },
+  { id: 'admin', label: 'Admin İletişim', icon: FiMessageCircle, href: 'https://t.me/mutluadmin', external: true },
   { id: 'hakkimizda', label: 'Hakkımızda', icon: FiInfo, path: '/hakkimizda' },
   { id: 'gizlilik', label: 'Gizlilik Politikası', icon: FiLock, path: '/gizlilik' },
 ];
@@ -74,7 +75,6 @@ export default function Sidebar() {
         className="fixed left-0 top-0 bottom-0 w-[280px] bg-[#0f0f0f] z-50 
           lg:translate-x-0 lg:static lg:z-auto border-r border-gray-800/50 flex flex-col"
       >
-        {/* Header */}
         <div className="p-5 border-b border-gray-800/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -85,16 +85,12 @@ export default function Sidebar() {
                 Mutlu Player
               </h1>
             </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 hover:bg-white/10 rounded-lg"
-            >
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-2 hover:bg-white/10 rounded-lg">
               <FiX className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Ana Menü */}
         <nav className="flex-1 overflow-y-auto py-3 px-3">
           <p className="text-[10px] text-gray-600 uppercase tracking-wider px-3 mb-2">Menü</p>
           <div className="space-y-0.5">
@@ -105,9 +101,7 @@ export default function Sidebar() {
                   key={item.id}
                   onClick={() => handleNavigate(item.path)}
                   className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
-                    isActive
-                      ? 'bg-blue-500/10 text-blue-400'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    isActive ? 'bg-blue-500/10 text-blue-400' : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
                   <item.icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
@@ -117,7 +111,6 @@ export default function Sidebar() {
             })}
           </div>
 
-          {/* Ekstra Linkler */}
           <p className="text-[10px] text-gray-600 uppercase tracking-wider px-3 mt-6 mb-2">Linkler</p>
           <div className="space-y-0.5">
             {extraLinks.map((link) => (
@@ -138,7 +131,6 @@ export default function Sidebar() {
           </div>
         </nav>
 
-        {/* Kullanıcı & Çıkış */}
         <div className="p-4 border-t border-gray-800/50">
           <div className="flex items-center space-x-3 mb-3 p-3 bg-white/5 rounded-xl">
             <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -149,11 +141,7 @@ export default function Sidebar() {
               <p className="text-[10px] text-gray-500 truncate">{site || 'IPTV'}</p>
             </div>
           </div>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors text-sm"
-          >
+          <button onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors text-sm">
             <FiLogOut className="w-4 h-4" />
             <span>Çıkış Yap</span>
           </button>
