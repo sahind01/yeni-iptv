@@ -23,7 +23,6 @@ export default function SeriesPage() {
   const [seriesGroups, setSeriesGroups] = useState<SeriesGroup[]>([]);
   const [filteredGroups, setFilteredGroups] = useState<SeriesGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadingProgress, setLoadingProgress] = useState(0);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeries, setSelectedSeries] = useState<SeriesGroup | null>(null);
@@ -40,34 +39,13 @@ export default function SeriesPage() {
   const fetchSeries = async () => {
     try {
       setIsLoading(true); setError('');
-      setLoadingProgress(10);
-
-      const cached = sessionStorage.getItem('mutlu_series_cache');
-      const cacheTime = sessionStorage.getItem('mutlu_series_cache_time');
-
-      if (cached && cacheTime && (Date.now() - parseInt(cacheTime) < 30 * 60 * 1000)) {
-        const parsed = JSON.parse(cached);
-        setSeriesGroups(parsed); setFilteredGroups(parsed);
-        setIsLoading(false);
-        return;
-      }
-
-      setLoadingProgress(30);
       const res = await fetch('https://m3u.ch/pl/03664cc59ee4eac89483715db404d9f0_0d5bec11282cce0532a95a62a4bb056f.m3u', { cache: 'no-store' });
-      setLoadingProgress(60);
       if (!res.ok) throw new Error('Liste alınamadı');
       const text = await res.text();
-      setLoadingProgress(80);
       const parsed = parseAndGroupM3U(text);
-      setLoadingProgress(95);
-
-      sessionStorage.setItem('mutlu_series_cache', JSON.stringify(parsed));
-      sessionStorage.setItem('mutlu_series_cache_time', Date.now().toString());
-
       setSeriesGroups(parsed); setFilteredGroups(parsed);
-      setLoadingProgress(100);
     } catch (err: any) { setError(err.message); }
-    finally { setTimeout(() => setIsLoading(false), 300); }
+    finally { setIsLoading(false); }
   };
 
   const parseAndGroupM3U = (content: string): SeriesGroup[] => {
@@ -172,10 +150,7 @@ export default function SeriesPage() {
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-12 h-12 border-3 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
-            <p className="text-gray-400 text-sm mb-2">Diziler yükleniyor...</p>
-            <div className="w-48 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-              <div className="h-full bg-purple-500 rounded-full transition-all duration-300" style={{ width: `${loadingProgress}%` }} />
-            </div>
+            <p className="text-gray-400 text-sm">Diziler yükleniyor...</p>
           </div>
         )}
 
