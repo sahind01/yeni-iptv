@@ -29,18 +29,28 @@ export function useAuth() {
       const channels = parser.parse(m3uContent);
       setChannels(channels);
 
+      // userId = direkt username (Firebase'deki key)
       const userId = username;
-      
+
+      // Firebase'den kullanıcıyı kontrol et
       const userData = await FirebaseService.getUserData(userId);
-      
-      if (userData) {
-        if (userData.password !== password) throw new Error('Hatalı şifre');
-        if (userData.expireDate) {
-          const expire = new Date(userData.expireDate).getTime();
-          if (Date.now() > expire) throw new Error('Süreniz dolmuştur');
-        }
-        await FirebaseService.updateLastLogin(userId);
+
+      if (!userData) {
+        throw new Error('Kullanıcı bulunamadı. Lütfen admin ile iletişime geçin.');
       }
+
+      if (userData.password !== password) {
+        throw new Error('Hatalı şifre');
+      }
+
+      if (userData.expireDate) {
+        const expire = new Date(userData.expireDate).getTime();
+        if (Date.now() > expire) {
+          throw new Error('Süreniz dolmuştur. Lütfen admin ile iletişime geçin.');
+        }
+      }
+
+      await FirebaseService.updateLastLogin(userId);
 
       login(userId, username, site, password);
       setAuthReady(true);
