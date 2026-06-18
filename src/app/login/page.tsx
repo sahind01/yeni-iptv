@@ -7,7 +7,7 @@ import { FiUser, FiLock, FiServer, FiEye, FiEyeOff } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { M3UParser } from '@/services/m3u-parser';
-import { getDatabase, ref, get, set, remove, onDisconnect } from 'firebase/database';
+import { ref, get, set, remove, onDisconnect, onValue } from 'firebase/database';
 import { db } from '@/services/firebase';
 
 export default function LoginPage() {
@@ -31,56 +31,91 @@ export default function LoginPage() {
     if (isAuthReady && isAuthenticated) router.push('/dashboard');
   }, [isAuthReady, isAuthenticated]);
 
-  const checkActiveDevice = async (userId: string): Promise<boolean> => {
-    try {
-      const deviceRef = ref(db, `activeDevices/${userId}`);
-      const snap = await get(deviceRef);
-      
-      if (!snap.exists()) return false;
-      
-      const data = snap.val();
-      const now = Date.now();
-      
-      // 5 dakikadan eski kaydı sil
-      if (data.timestamp && now - data.timestamp > 5 * 60 * 1000) {
-        await remove(deviceRef);
-        return false;
-      }
-      
-      return true; // Aktif cihaz var
-    } catch (e) {
-      return false;
+  const getDeviceInfo = () => {
+    const ua = navigator.userAgent;
+    const screen = `${window.screen.width}x${window.screen.height}`;
+    const lang = navigator.language;
+    const platform = navigator.platform;
+    const vendor = navigator.vendor || '';
+    const gpu = (() => {
+      try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || (canvas as any).getContext('experimental-webgl');
+        if (gl) {
+          const debugInfo = (gl as any).getExtension('WEBGL_debug_renderer_info');
+          if (debugInfo) return (gl as any).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+        }
+      } catch (e) {}
+      return '';
+    })();
+
+    const fingerprint = `${ua}|${screen}|${lang}|${platform}|${vendor}|${gpu}`;
+    let hash = 0;
+    for (let i = 0; i < fingerprint.length; i++) {
+      const char = fingerprint.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0;
     }
+    return `dev_${Math.abs(hash).toString(36)}`;
   };
 
-  const setActiveDevice = async (userId: string) => {
+  const checkAndSetDevice = async (userId: string): Promise<boolean> => {
+    const deviceId = getDeviceInfo();
+    const now = Date.now();
     const deviceRef = ref(db, `activeDevices/${userId}`);
-    
-    // Cihaz kaydını oluştur
-    await set(deviceRef, {
-      timestamp: Date.now(),
-      deviceId: Math.random().toString(36).slice(2),
-    });
-    
-    // Sayfa kapanınca VEYA çıkınca otomatik sil
-    const disconnectRef = ref(db, `activeDevices/${userId}`);
-    onDisconnect(disconnectRef).remove();
-    
-    // Her 30 saniyede bir timestamp güncelle
-    const keepAlive = setInterval(async () => {
-      try {
-        const snap = await get(deviceRef);
-        if (snap.exists()) {
-          await set(deviceRef, { timestamp: Date.now(), deviceId: snap.val().deviceId });
-        } else {
-          clearInterval(keepAlive);
+    const snap = await get(deviceRef);
+
+    if (snap.exists()) {
+      const data = snap.val();
+      const devices = Object.entries(data) as [string, any][];
+      
+      // 10 dakikadan eski cihazları temizle
+      for (const [key, value] of devices) {
+        if (now - value.timestamp > 10 * 60 * 1000) {
+          try { await remove(ref(db, `activeDevices/${userId}/${key}`)); } catch (e) {}
         }
-      } catch (e) {
-        clearInterval(keepAlive);
       }
-    }, 30000);
-    
-    return keepAlive;
+
+      // Güncel cihazları kontrol et
+      const freshDevices = devices.filter(([key, value]) => now - value.timestamp <= 10 * 60 * 1000);
+      
+      if (freshDevices.length >= 1) {
+        // Aynı cihaz mı kontrol et
+        const isSameDevice = freshDevices.some(([key, value]) => value.deviceId === deviceId);
+        
+        if (isSameDevice) {
+          // Aynı cihaz - timestamp güncelle
+          const existingKey = freshDevices.find(([key, value]) => value.deviceId === deviceId)?.[0];
+          if (existingKey) {
+            await set(ref(db, `activeDevices/${userId}/${existingKey}`), {
+              deviceId,
+              timestamp: now,
+              screen: `${window.screen.width}x${window.screen.height}`,
+              browser: navigator.userAgent.substring(0, 100),
+            });
+          }
+          return true;
+        } else {
+          // Farklı cihaz - giriş RED
+          return false;
+        }
+      }
+    }
+
+    // Yeni cihaz kaydet
+    const deviceKey = `device_${now}`;
+    await set(ref(db, `activeDevices/${userId}/${deviceKey}`), {
+      deviceId,
+      timestamp: now,
+      screen: `${window.screen.width}x${window.screen.height}`,
+      browser: navigator.userAgent.substring(0, 100),
+    });
+
+    // Sayfa kapanınca bu cihazı sil
+    const disconnectRef = ref(db, `activeDevices/${userId}/${deviceKey}`);
+    onDisconnect(disconnectRef).remove();
+
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,38 +132,27 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim();
 
-      // 1. M3U API kontrolü
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
-      // 2. UserId oluştur
       const cleanSite = site.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const userId = `${cleanSite}_${cleanUser}`;
 
-      // 3. Cihaz kontrolü
-      const isActive = await checkActiveDevice(userId);
-      
-      if (isActive) {
-        // BAŞKA CİHAZ AKTİF - YÖNLENDİR
+      const allowed = await checkAndSetDevice(userId);
+
+      if (!allowed) {
         window.location.href = 'https://mutlu-iptv.vercel.app';
         return;
       }
 
-      // 4. BU CİHAZI AKTİF ET
-      const keepAlive = await setActiveDevice(userId);
-      (window as any).__mutluKeepAlive = keepAlive;
-
-      // 5. M3U çek
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
 
-      // 6. Firebase'e kaydet
       await FirebaseService.loginUser(site, username, password);
 
-      // 7. Store'a kaydet
       storeLogin(userId, username, site, password);
       setChannels(channels);
       setAuthReady(true);
