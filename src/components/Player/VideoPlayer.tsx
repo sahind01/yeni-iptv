@@ -157,23 +157,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     resetControlsTimer();
   };
 
-  // Harici Exo Player / Android Video Oynatıcı yönlendirmesi
-  const openInExoPlayer = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Video click eventini engellemek için
-    if (!currentChannel?.url) return;
-    
-    const url = currentChannel.url;
-    
-    // HTTP/HTTPS şemasını ayırıp Android Intent URI oluşturuyoruz
-    const cleanUrl = url.replace(/^https?:\/\//, '');
-    const scheme = url.startsWith('https') ? 'https' : 'http';
-    
-    // Bu intent, cihazda yüklü olan ve video oynatabilen (ExoPlayer tabanlılar dahil) uygulamaları tetikler
-    const intentUrl = `intent://${cleanUrl}#Intent;action=android.intent.action.VIEW;scheme=${scheme};type=video/*;end;`;
-    
-    window.location.href = intentUrl;
-  };
-
   const formatTime = (t: number) => {
     if (!isFinite(t) || t < 0) return '0:00';
     const h = Math.floor(t / 3600);
@@ -286,19 +269,10 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
           <div className="flex items-center space-x-2">
             {!playerState.isLive && (
-              <span className="text-xs text-gray-400 mr-2">
+              <span className="text-xs text-gray-400">
                 {formatTime(playerState.currentTime)} / {formatTime(playerState.duration)}
               </span>
             )}
-            
-            {/* EXO PLAYER BUTONU */}
-            <button 
-              onClick={openInExoPlayer} 
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-lg flex items-center transition-colors border border-blue-500/50"
-            >
-              🚀 Exo Player'da Aç
-            </button>
-
             <button onClick={toggleFullscreen} className="p-2 hover:bg-white/10 rounded-lg text-lg">
               ⛶
             </button>
