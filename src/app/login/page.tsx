@@ -21,7 +21,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     if (isAuthReady && isAuthenticated) router.push('/dashboard');
@@ -30,7 +29,6 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setDebugInfo('');
     
     if (!formData.username.trim()) { setError('Kullanıcı adı gerekli'); return; }
     if (!formData.password.trim()) { setError('Şifre gerekli'); return; }
@@ -42,53 +40,55 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim() || 'IPTV';
 
-      setDebugInfo('M3U kontrol ediliyor...');
+      // M3U kontrol
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı (M3U)');
+      if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
-      setDebugInfo('Firebase kontrol ediliyor... UserId: ' + username);
+      // TÜM USERS'I TARA - username alanına göre bul
+      const allUsersRef = ref(db, 'users');
+      const allSnap = await get(allUsersRef);
       
-      // DİREKT FIREBASE'DEN OKU
-      const userRef = ref(db, `users/${username}`);
-      const snapshot = await get(userRef);
-      
-      setDebugInfo('Firebase yanıt: ' + (snapshot.exists() ? 'KULLANICI BULUNDU' : 'KULLANICI YOK'));
-      
-      if (!snapshot.exists()) {
-        // Bir de tüm users'ları listeleyelim
-        const allUsersRef = ref(db, 'users');
-        const allSnap = await get(allUsersRef);
-        if (allSnap.exists()) {
-          const keys = Object.keys(allSnap.val());
-          setDebugInfo('Firebase\'deki kullanıcılar: ' + keys.join(', ') + ' | Aranan: ' + username);
-        } else {
-          setDebugInfo('Firebase\'de hiç kullanıcı yok!');
+      let foundUserId = null;
+      let foundUserData = null;
+
+      if (allSnap.exists()) {
+        const allUsers = allSnap.val();
+        for (const [key, value] of Object.entries(allUsers)) {
+          const user = value as any;
+          if (user.username === username) {
+            foundUserId = key;
+            foundUserData = user;
+            break;
+          }
         }
-        throw new Error('Kullanıcı bulunamadı');
       }
 
-      const userData = snapshot.val();
-      setDebugInfo('Şifre kontrolü...');
+      if (!foundUserData) {
+        throw new Error('Kullanıcı bulunamadı. Lütfen admin ile iletişime geçin.');
+      }
 
-      if (userData.password !== password) {
+      // Şifre kontrolü
+      if (foundUserData.password !== password) {
         throw new Error('Hatalı şifre');
       }
 
-      if (userData.expireDate) {
-        const expire = new Date(userData.expireDate).getTime();
+      // Süre kontrolü
+      if (foundUserData.expireDate) {
+        const expire = new Date(foundUserData.expireDate).getTime();
         if (Date.now() > expire) {
           throw new Error('Süreniz dolmuştur');
         }
       }
 
-      setDebugInfo('Giriş başarılı!');
+      // lastAccess güncelle
+      await FirebaseService.updateLastLogin(foundUserId);
 
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
 
-      storeLogin(username, username, site, password);
+      storeLogin(foundUserId, username, site, password);
       setChannels(channels);
       setAuthReady(true);
       router.push('/dashboard');
@@ -152,12 +152,7 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-            
-            {debugInfo && (
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-blue-400 text-xs whitespace-pre-wrap">{debugInfo}</div>
-            )}
             {error && <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">{error}</div>}
-            
             <button type="submit" disabled={isLoading} className="btn-primary w-full flex items-center justify-center space-x-2 h-12">
               {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span>Giriş Yap</span>}
             </button>
