@@ -32,7 +32,6 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!formData.site.trim()) { setError('Site adı gerekli'); return; }
     if (!formData.username.trim()) { setError('Kullanıcı adı gerekli'); return; }
     if (!formData.password.trim()) { setError('Şifre gerekli'); return; }
 
@@ -41,36 +40,32 @@ export default function LoginPage() {
     try {
       const username = formData.username.trim();
       const password = formData.password.trim();
-      const site = formData.site.trim();
+      const site = formData.site.trim() || 'IPTV';
 
-      // M3U kontrol
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
-      // Firebase'de kullanıcıyı bul - senin userId yapına göre
-      // Senin userId'n direkt "Bizim" gibi olabilir, site+kullaniciadi değil
-      const userId = username; // veya site + username, senin yapına göre ayarla
+      // userId = direkt username
+      const userId = username;
 
       const userData = await FirebaseService.getUserData(userId);
 
       if (!userData) {
-        throw new Error('Kullanıcı bulunamadı');
+        throw new Error('Kullanıcı bulunamadı. Lütfen admin ile iletişime geçin.');
       }
 
       if (userData.password !== password) {
         throw new Error('Hatalı şifre');
       }
 
-      // Süre kontrolü - senin alan adın: expireDate
       if (userData.expireDate) {
-        const expireDate = new Date(userData.expireDate).getTime();
-        if (Date.now() > expireDate) {
+        const expire = new Date(userData.expireDate).getTime();
+        if (Date.now() > expire) {
           throw new Error('Süreniz dolmuştur');
         }
       }
 
-      // lastAccess güncelle
       await FirebaseService.updateLastLogin(userId);
 
       const m3uContent = await response.text();
@@ -118,7 +113,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="glass-card p-6 space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Site Adı</label>
+              <label className="block text-sm text-gray-400 mb-1.5">Site Adı (Opsiyonel)</label>
               <div className="relative">
                 <FiServer className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input type="text" name="site" value={formData.site} onChange={handleChange} placeholder="Mutlu IPTV" className="input-field pl-10" autoComplete="off" />
