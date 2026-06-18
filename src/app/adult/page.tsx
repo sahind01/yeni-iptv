@@ -45,25 +45,31 @@ export default function AdultPage() {
     const uid = userId || useStore.getState().userId;
     if (!uid) return;
     const existingPin = await FirebaseService.getAdultPin(uid);
-    existingPin ? (setSavedPin(existingPin), setStep('enter')) : setStep('create');
+    if (existingPin) { setSavedPin(existingPin); setStep('enter'); }
+    else { setStep('create'); }
   };
 
   const handleNumberClick = (num: string) => {
     if (pin.length < 4) {
       const newPin = pin + num; setPin(newPin); setPinError('');
-      if (newPin.length === 4) step === 'create' ? saveNewPin(newPin) : verifyPin(newPin);
+      if (newPin.length === 4) { step === 'create' ? saveNewPin(newPin) : verifyPin(newPin); }
     }
   };
+
   const handleDelete = () => { setPin(p => p.slice(0, -1)); setPinError(''); };
+
   const saveNewPin = async (np: string) => {
     const uid = userId || useStore.getState().userId;
     if (!uid) return;
     await FirebaseService.setAdultPin(uid, CryptoUtils.hashPin(np));
     setSavedPin(CryptoUtils.hashPin(np)); setStep('verified'); setPin('');
   };
+
   const verifyPin = async (ip: string) => {
-    savedPin && CryptoUtils.verifyPin(ip, savedPin) ? (setStep('verified'), setPin('')) : (setPinError('Hatalı PIN!'), setPin(''));
+    if (savedPin && CryptoUtils.verifyPin(ip, savedPin)) { setStep('verified'); setPin(''); }
+    else { setPinError('Hatalı PIN!'); setPin(''); }
   };
+
   const handleResetPin = () => { setStep('create'); setPin(''); setPinError(''); };
   const handleLock = () => { setStep('enter'); setPin(''); setSelectedChannel(null); setCurrentChannel(null); setChannels([]); };
 
@@ -74,7 +80,8 @@ export default function AdultPage() {
       if (!res.ok) throw new Error('Liste alınamadı');
       const text = await res.text();
       const parsed = parseM3U(text);
-      setChannels(parsed); setFilteredChannels(parsed);
+      if (parsed.length === 0) { setError('Kanal bulunamadı'); }
+      else { setChannels(parsed); setFilteredChannels(parsed); }
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }
   };
@@ -92,13 +99,11 @@ export default function AdultPage() {
         cur = { id: `adult_${i}`, name, logo, group, url: '' };
       } else if (line && (line.startsWith('http://') || line.startsWith('https://')) && cur) {
         cur.url = line;
-        const g = (cur.group || '').toLowerCase();
-        if (g.includes('adult') || g.includes('xxx') || g.includes('18') || g.includes('erotik') || g.includes('porn')) {
-          result.push({ ...cur });
-        }
+        result.push({ ...cur });
         cur = null;
       }
     }
+    console.log('Adult kanal sayısı:', result.length);
     return result;
   };
 
@@ -112,7 +117,9 @@ export default function AdultPage() {
   const displayed = filteredChannels.slice(0, showCount);
   const hasMore = showCount < filteredChannels.length;
 
-  if (step === 'loading') return <MainLayout><div className="min-h-[80vh] flex items-center justify-center"><div className="w-10 h-10 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div></MainLayout>;
+  if (step === 'loading') {
+    return <MainLayout><div className="min-h-[80vh] flex items-center justify-center"><div className="w-10 h-10 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div></MainLayout>;
+  }
 
   if (step === 'create' || step === 'enter') {
     return (
@@ -171,15 +178,15 @@ export default function AdultPage() {
           </div>
           <div className="flex items-center space-x-2">
             <div className="flex bg-[#1a1a1a] rounded-lg p-0.5 border border-gray-700/50">
-              <button onClick={() => setViewMode('grid')} className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-white'}`}>
+              <button onClick={() => setViewMode('grid')} className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500'}`}>
                 <FiGrid className="w-4 h-4" />
               </button>
-              <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-white'}`}>
+              <button onClick={() => setViewMode('list')} className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500'}`}>
                 <FiList className="w-4 h-4" />
               </button>
             </div>
-            <button onClick={handleResetPin} className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs">PIN</button>
-            <button onClick={handleLock} className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs">Kilitle</button>
+            <button onClick={handleResetPin} className="px-3 py-1.5 bg-gray-800 rounded-lg text-xs">PIN</button>
+            <button onClick={handleLock} className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-xs">Kilitle</button>
           </div>
         </div>
 
