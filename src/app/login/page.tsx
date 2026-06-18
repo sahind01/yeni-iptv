@@ -7,23 +7,21 @@ import { FiUser, FiLock, FiServer, FiEye, FiEyeOff } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { M3UParser } from '@/services/m3u-parser';
+import { ref, get } from 'firebase/database';
+import { db } from '@/services/firebase';
 
 export default function LoginPage() {
   const router = useRouter();
   const { 
     isAuthenticated, isAuthReady,
     login: storeLogin, setChannels, setAuthReady,
-    username: savedUser, site: savedSite, password: savedPass,
   } = useStore();
   
-  const [formData, setFormData] = useState({
-    site: savedSite || '',
-    username: savedUser || '',
-    password: savedPass || '',
-  });
+  const [formData, setFormData] = useState({ site: '', username: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     if (isAuthReady && isAuthenticated) router.push('/dashboard');
@@ -32,6 +30,8 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setDebugInfo('');
+    
     if (!formData.username.trim()) { setError('Kullanıcı adı gerekli'); return; }
     if (!formData.password.trim()) { setError('Şifre gerekli'); return; }
 
@@ -42,18 +42,34 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim() || 'IPTV';
 
+      setDebugInfo('M3U kontrol ediliyor...');
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
+      if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı (M3U)');
 
-      // userId = direkt username
-      const userId = username;
-
-      const userData = await FirebaseService.getUserData(userId);
-
-      if (!userData) {
-        throw new Error('Kullanıcı bulunamadı. Lütfen admin ile iletişime geçin.');
+      setDebugInfo('Firebase kontrol ediliyor... UserId: ' + username);
+      
+      // DİREKT FIREBASE'DEN OKU
+      const userRef = ref(db, `users/${username}`);
+      const snapshot = await get(userRef);
+      
+      setDebugInfo('Firebase yanıt: ' + (snapshot.exists() ? 'KULLANICI BULUNDU' : 'KULLANICI YOK'));
+      
+      if (!snapshot.exists()) {
+        // Bir de tüm users'ları listeleyelim
+        const allUsersRef = ref(db, 'users');
+        const allSnap = await get(allUsersRef);
+        if (allSnap.exists()) {
+          const keys = Object.keys(allSnap.val());
+          setDebugInfo('Firebase\'deki kullanıcılar: ' + keys.join(', ') + ' | Aranan: ' + username);
+        } else {
+          setDebugInfo('Firebase\'de hiç kullanıcı yok!');
+        }
+        throw new Error('Kullanıcı bulunamadı');
       }
+
+      const userData = snapshot.val();
+      setDebugInfo('Şifre kontrolü...');
 
       if (userData.password !== password) {
         throw new Error('Hatalı şifre');
@@ -66,13 +82,13 @@ export default function LoginPage() {
         }
       }
 
-      await FirebaseService.updateLastLogin(userId);
+      setDebugInfo('Giriş başarılı!');
 
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
 
-      storeLogin(userId, username, site, password);
+      storeLogin(username, username, site, password);
       setChannels(channels);
       setAuthReady(true);
       router.push('/dashboard');
@@ -113,7 +129,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="glass-card p-6 space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Site Adı (Opsiyonel)</label>
+              <label className="block text-sm text-gray-400 mb-1.5">Site</label>
               <div className="relative">
                 <FiServer className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input type="text" name="site" value={formData.site} onChange={handleChange} placeholder="Mutlu IPTV" className="input-field pl-10" autoComplete="off" />
@@ -136,7 +152,12 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+            
+            {debugInfo && (
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-blue-400 text-xs whitespace-pre-wrap">{debugInfo}</div>
+            )}
             {error && <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">{error}</div>}
+            
             <button type="submit" disabled={isLoading} className="btn-primary w-full flex items-center justify-center space-x-2 h-12">
               {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span>Giriş Yap</span>}
             </button>
