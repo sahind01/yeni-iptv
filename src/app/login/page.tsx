@@ -40,17 +40,15 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim() || 'IPTV';
 
-      // M3U kontrol
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
-      // TÜM USERS'I TARA - username alanına göre bul
       const allUsersRef = ref(db, 'users');
       const allSnap = await get(allUsersRef);
       
-      let foundUserId = null;
-      let foundUserData = null;
+      let foundUserId: string | null = null;
+      let foundUserData: any = null;
 
       if (allSnap.exists()) {
         const allUsers = allSnap.val();
@@ -64,16 +62,14 @@ export default function LoginPage() {
         }
       }
 
-      if (!foundUserData) {
-        throw new Error('Kullanıcı bulunamadı. Lütfen admin ile iletişime geçin.');
+      if (!foundUserData || !foundUserId) {
+        throw new Error('Kullanıcı bulunamadı');
       }
 
-      // Şifre kontrolü
       if (foundUserData.password !== password) {
         throw new Error('Hatalı şifre');
       }
 
-      // Süre kontrolü
       if (foundUserData.expireDate) {
         const expire = new Date(foundUserData.expireDate).getTime();
         if (Date.now() > expire) {
@@ -81,7 +77,6 @@ export default function LoginPage() {
         }
       }
 
-      // lastAccess güncelle
       await FirebaseService.updateLastLogin(foundUserId);
 
       const m3uContent = await response.text();
