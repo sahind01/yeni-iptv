@@ -28,8 +28,8 @@ const menuItems = [
 
 const extraLinks = [
   { id: 'nasil', label: 'Nasıl Kullanılır?', icon: FiHelpCircle, path: '/nasil-kullanilir' },
-  { id: 'telegram', label: 'Telegram Grubu', icon: FiSend, href: 'https://t.me/mutluiptv', external: true },
-  { id: 'admin', label: 'Admin İletişim', icon: FiMessageCircle, href: 'https://t.me/mutluadmin', external: true },
+  { id: 'telegram', label: 'Telegram Grubu', icon: FiSend, href: 'https://t.me/digitaltivi', external: true },
+  { id: 'admin', label: 'Admin İletişim', icon: FiMessageCircle, href: 'https://t.me/mutflixadmin', external: true },
   { id: 'hakkimizda', label: 'Hakkımızda', icon: FiInfo, path: '/hakkimizda' },
   { id: 'gizlilik', label: 'Gizlilik Politikası', icon: FiLock, path: '/gizlilik' },
 ];
