@@ -26,7 +26,7 @@ export default function LiveTVPage() {
   const [isLoadingChannels, setIsLoadingChannels] = useState(true);
   const [showPlayer, setShowPlayer] = useState(false);
   const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
   useEffect(() => { fetchChannels(); loadFavorites(); }, []);
 
