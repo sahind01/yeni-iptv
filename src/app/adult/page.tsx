@@ -95,7 +95,7 @@ export default function AdultPage() {
       setIsLoading(true);
       setError('');
       
-      const response = await fetch('https://raw.githubusercontent.com/hushujiang/hushujiang.github.io/521bf4b5e9394397a55f55b6236574edac7d2b5f/zb2.txt', { cache: 'no-store' });
+      const response = await fetch('https://raw.githubusercontent.com/caonimagfw/tv-box/ae3579019efafaccbc755f3aed5a1c55a4e88e53/eklins_fdtv/tv/xxx.m3u', { cache: 'no-store' });
       if (!response.ok) throw new Error('Liste alınamadı');
       
       const text = await response.text();
