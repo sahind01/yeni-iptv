@@ -8,6 +8,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const retryTimer = useRef<NodeJS.Timeout | null>(null);
   const { currentChannel } = useStore();
 
   const [playerState, setPlayerState] = useState({
@@ -28,6 +29,10 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
+    }
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current);
+      retryTimer.current = null;
     }
 
     const url = currentChannel.url;
@@ -58,10 +63,12 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       video.load();
       video.play().catch(() => {
         setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı, tekrar deneniyor...' }));
-        setTimeout(() => {
+        retryTimer.current = setTimeout(() => {
           video.load();
-          video.play().catch(() => {});
-        }, 2000);
+          video.play().catch(() => {
+            setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+          });
+        }, 3000);
       });
     }
 
@@ -69,6 +76,10 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
+      }
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+        retryTimer.current = null;
       }
     };
   }, [currentChannel?.url]);
@@ -83,7 +94,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const onDuration = () => setPlayerState(prev => ({ ...prev, duration: video.duration }));
     const onVolume = () => setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
     const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-    const onWaiting = () => setPlayerState(prev => ({ ...prev, error: 'Yükleniyor...' }));
     const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
 
     video.addEventListener('play', onPlay);
@@ -92,7 +102,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     video.addEventListener('durationchange', onDuration);
     video.addEventListener('volumechange', onVolume);
     video.addEventListener('error', onError);
-    video.addEventListener('waiting', onWaiting);
     video.addEventListener('canplay', onCanPlay);
 
     return () => {
@@ -102,7 +111,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       video.removeEventListener('durationchange', onDuration);
       video.removeEventListener('volumechange', onVolume);
       video.removeEventListener('error', onError);
-      video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('canplay', onCanPlay);
     };
   }, []);
@@ -130,6 +138,17 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       document.exitFullscreen();
     } else {
       containerRef.current?.requestFullscreen();
+    }
+  };
+
+  const handleRetry = () => {
+    if (videoRef.current && currentChannel?.url) {
+      setPlayerState(prev => ({ ...prev, error: null }));
+      videoRef.current.src = currentChannel.url;
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {
+        setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+      });
     }
   };
 
@@ -161,18 +180,32 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         autoPlay
       />
 
+      {/* GERİ TUŞU HER ZAMAN GÖRÜNÜR */}
+      {onBack && (
+        <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent z-20">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onBack();
+            }}
+            className="text-sm hover:text-gray-300 bg-black/30 px-3 py-1.5 rounded-lg backdrop-blur"
+          >
+            ← Geri
+          </button>
+        </div>
+      )}
+
+      {/* Hata - geri tuşunu engellemez */}
       {playerState.error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
           <div className="text-center">
-            <p className="text-gray-300 text-sm mb-2">{playerState.error}</p>
+            <p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
             <button
-              onClick={() => {
-                if (videoRef.current) {
-                  videoRef.current.load();
-                  videoRef.current.play().catch(() => {});
-                }
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRetry();
               }}
-              className="px-4 py-1.5 bg-blue-500 rounded-lg text-xs"
+              className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm transition-colors"
             >
               Tekrar Dene
             </button>
@@ -180,20 +213,14 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         </div>
       )}
 
-      <div
-        className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent z-10"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {onBack && (
-          <button onClick={onBack} className="text-sm hover:text-gray-300">
-            ← Geri
-          </button>
-        )}
-        <p className="text-xs font-medium mt-1">{currentChannel.name}</p>
+      {/* Kanal adı */}
+      <div className="absolute top-12 left-0 p-3 z-10 pointer-events-none">
+        <p className="text-xs font-medium text-white/80">{currentChannel.name}</p>
       </div>
 
+      {/* Alt kontroller */}
       <div
-        className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent z-10"
+        className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent z-20"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
