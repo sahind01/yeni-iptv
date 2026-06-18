@@ -43,40 +43,36 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim();
 
-      // M3U API kontrolü
+      // M3U kontrol
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
-      const cleanSite = site.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const userId = `${cleanSite}_${cleanUser}`;
+      // Firebase'de kullanıcıyı bul - senin userId yapına göre
+      // Senin userId'n direkt "Bizim" gibi olabilir, site+kullaniciadi değil
+      const userId = username; // veya site + username, senin yapına göre ayarla
 
-      // Kullanıcı var mı kontrol et
-      const existingUser = await FirebaseService.getUserData(userId);
+      const userData = await FirebaseService.getUserData(userId);
 
-      if (existingUser) {
-        // KULLANICI VAR - Şifre kontrolü
-        if (existingUser.password !== password) {
-          throw new Error('Hatalı şifre');
-        }
-
-        // SÜRE KONTROLÜ
-        if (existingUser.expiryDate) {
-          const now = Date.now();
-          if (now > existingUser.expiryDate) {
-            throw new Error('Süreniz dolmuştur. Lütfen admin ile iletişime geçin.');
-          }
-        }
-
-        // Son girişi güncelle
-        await FirebaseService.updateLastLogin(userId);
-      } else {
-        // YENİ KULLANICI - Admin onayı olmadan kayıt OLMAZ
-        throw new Error('Bu kullanıcı sistemde kayıtlı değil. Lütfen admin ile iletişime geçin.');
+      if (!userData) {
+        throw new Error('Kullanıcı bulunamadı');
       }
 
-      // M3U çek
+      if (userData.password !== password) {
+        throw new Error('Hatalı şifre');
+      }
+
+      // Süre kontrolü - senin alan adın: expireDate
+      if (userData.expireDate) {
+        const expireDate = new Date(userData.expireDate).getTime();
+        if (Date.now() > expireDate) {
+          throw new Error('Süreniz dolmuştur');
+        }
+      }
+
+      // lastAccess güncelle
+      await FirebaseService.updateLastLogin(userId);
+
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
