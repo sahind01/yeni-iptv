@@ -7,7 +7,7 @@ import { FiUser, FiLock, FiServer, FiEye, FiEyeOff } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { M3UParser } from '@/services/m3u-parser';
-import { ref, get, set, remove, onDisconnect } from 'firebase/database';
+import { ref, get, set, onDisconnect } from 'firebase/database';
 import { db } from '@/services/firebase';
 
 export default function LoginPage() {
@@ -27,8 +27,30 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // LOGIN SAYFASINDAYKEN DE KONTROL ET
   useEffect(() => {
-    if (isAuthReady && isAuthenticated) router.push('/dashboard');
+    if (!isAuthReady) return;
+    
+    // Eğer zaten giriş yapmışsa ve farklı cihaz varsa AT
+    if (isAuthenticated) {
+      const userId = useStore.getState().userId;
+      const deviceId = localStorage.getItem('mutlu_device_id');
+      
+      if (userId && deviceId) {
+        const storedDevice = localStorage.getItem(`mutlu_active_${userId}`);
+        const storedTime = localStorage.getItem(`mutlu_active_${userId}_time`);
+        
+        if (storedDevice && storedTime) {
+          const elapsed = Date.now() - parseInt(storedTime);
+          if (elapsed < 30000 && storedDevice !== deviceId) {
+            localStorage.removeItem('mutlu_player_storage');
+            window.location.href = 'https://mutlu-iptv.vercel.app';
+            return;
+          }
+        }
+      }
+      router.push('/dashboard');
+    }
   }, [isAuthReady, isAuthenticated]);
 
   const getDeviceId = () => {
@@ -63,54 +85,44 @@ export default function LoginPage() {
       const userId = `${cleanSite}_${cleanUser}`;
       const deviceId = getDeviceId();
 
-      // 1. LOCALSTORAGE KONTROLÜ - En hızlı
+      // KONTROL: localStorage
       const storedDevice = localStorage.getItem(`mutlu_active_${userId}`);
       const storedTime = localStorage.getItem(`mutlu_active_${userId}_time`);
-      
+
       if (storedDevice && storedTime) {
         const elapsed = Date.now() - parseInt(storedTime);
-        // 30 saniyeden yeniyse ve farklı cihazsa AT
         if (elapsed < 30000 && storedDevice !== deviceId) {
           window.location.href = 'https://mutlu-iptv.vercel.app';
           return;
         }
       }
 
-      // 2. FIREBASE KONTROLÜ
+      // KONTROL: Firebase
       const deviceRef = ref(db, `activeDevices/${userId}/device`);
       const snap = await get(deviceRef);
 
       if (snap.exists()) {
-        const fbDevice = snap.val().deviceId;
-        const fbTime = snap.val().timestamp;
-        const elapsed = Date.now() - fbTime;
-        
-        // 30 saniyeden yeni ve farklı cihazsa AT
-        if (elapsed < 30000 && fbDevice !== deviceId) {
+        const data = snap.val();
+        const elapsed = Date.now() - data.timestamp;
+        if (elapsed < 30000 && data.deviceId !== deviceId) {
           window.location.href = 'https://mutlu-iptv.vercel.app';
           return;
         }
       }
 
-      // CİHAZI KAYDET - Hem localStorage hem Firebase
+      // KAYDET
       localStorage.setItem(`mutlu_active_${userId}`, deviceId);
       localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
 
-      await set(deviceRef, {
-        deviceId: deviceId,
-        timestamp: Date.now(),
-      });
-
-      // Sayfa kapanınca Firebase'den sil
+      await set(deviceRef, { deviceId, timestamp: Date.now() });
       onDisconnect(deviceRef).remove();
 
-      // 30 saniyede bir localStorage'ı güncelle (sayfa açık kaldıkça)
+      // 15 saniyede bir güncelle
       const keepAlive = setInterval(() => {
         localStorage.setItem(`mutlu_active_${userId}`, deviceId);
         localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
-        set(deviceRef, { deviceId: deviceId, timestamp: Date.now() }).catch(() => {});
+        set(deviceRef, { deviceId, timestamp: Date.now() }).catch(() => {});
       }, 15000);
-
       (window as any).__mutluKeepAlive = keepAlive;
 
       // M3U çek
