@@ -43,6 +43,7 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim();
 
+      // M3U API kontrolü
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
@@ -51,19 +52,34 @@ export default function LoginPage() {
       const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const userId = `${cleanSite}_${cleanUser}`;
 
+      // Kullanıcı var mı kontrol et
+      const existingUser = await FirebaseService.getUserData(userId);
+
+      if (existingUser) {
+        // KULLANICI VAR - Şifre kontrolü
+        if (existingUser.password !== password) {
+          throw new Error('Hatalı şifre');
+        }
+
+        // SÜRE KONTROLÜ
+        if (existingUser.expiryDate) {
+          const now = Date.now();
+          if (now > existingUser.expiryDate) {
+            throw new Error('Süreniz dolmuştur. Lütfen admin ile iletişime geçin.');
+          }
+        }
+
+        // Son girişi güncelle
+        await FirebaseService.updateLastLogin(userId);
+      } else {
+        // YENİ KULLANICI - Admin onayı olmadan kayıt OLMAZ
+        throw new Error('Bu kullanıcı sistemde kayıtlı değil. Lütfen admin ile iletişime geçin.');
+      }
+
+      // M3U çek
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
-
-      await FirebaseService.loginUser(site, username, password);
-
-      // İlk girişse 30 günlük süre tanımla
-      const userData = await FirebaseService.getUserData(userId);
-      if (!userData?.startDate) {
-        const now = Date.now();
-        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-        await FirebaseService.setUserExpiry(userId, now, now + thirtyDays);
-      }
 
       storeLogin(userId, username, site, password);
       setChannels(channels);
