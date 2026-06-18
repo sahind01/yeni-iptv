@@ -16,38 +16,33 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getDatabase(app);
 
-// Firebase path için geçersiz karakterleri temizle
 function sanitizePath(str: string): string {
   return str
-    .replace(/[.#$\[\]]/g, '_')  // Geçersiz karakterleri _ ile değiştir
-    .replace(/\/+/g, '_')         // Slash'leri _ ile değiştir
-    .replace(/^https?_/, '')      // http/https kaldır
-    .replace(/:/g, '')            // : kaldır
+    .replace(/[.#$\[\]]/g, '_')
+    .replace(/\/+/g, '_')
+    .replace(/^https?_/, '')
+    .replace(/:/g, '')
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '_')         // Boşlukları _ ile değiştir
-    .replace(/_+/g, '_')          // Birden fazla _ tek yap
-    .replace(/^_|_$/g, '');       // Baştaki/sondaki _ temizle
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
 }
 
 export class FirebaseService {
-  
+
   // ==================== KULLANICI GİRİŞ ====================
-  
+
   static async loginUser(site: string, username: string, password: string) {
     try {
-      // Site adını temizle
       const cleanSite = sanitizePath(site);
       const cleanUsername = sanitizePath(username);
       const userId = `${cleanSite}_${cleanUsername}`;
-      
-      console.log('Temizlenmiş userId:', userId); // Debug için
-      
+
       const userRef = ref(db, `users/${userId}`);
       const snapshot = await get(userRef);
 
       if (!snapshot.exists()) {
-        // Yeni kullanıcı oluştur
         await set(userRef, {
           username: username,
           site: site,
@@ -63,12 +58,10 @@ export class FirebaseService {
           }
         });
       } else {
-        // Şifre kontrolü
         const userData = snapshot.val();
         if (userData.password !== password) {
           throw new Error('Hatalı şifre');
         }
-        // Son girişi güncelle
         await update(userRef, { lastLogin: Date.now() });
       }
 
@@ -84,10 +77,7 @@ export class FirebaseService {
     try {
       const userRef = ref(db, `users/${userId}`);
       const snapshot = await get(userRef);
-      
-      if (snapshot.exists()) {
-        return snapshot.val();
-      }
+      if (snapshot.exists()) return snapshot.val();
       return null;
     } catch (error) {
       console.error('Kullanıcı bilgileri alınamadı:', error);
@@ -105,13 +95,64 @@ export class FirebaseService {
     }
   }
 
+  // ==================== SESSION YÖNETİMİ (MAX 2 KİŞİ) ====================
+
+  static async startSession(userId: string): Promise<string> {
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await set(ref(db, `sessions/${userId}/${sessionId}`), {
+      startTime: Date.now(),
+      lastActive: Date.now(),
+    });
+    return sessionId;
+  }
+
+  static async updateSession(userId: string, sessionId: string) {
+    try {
+      await update(ref(db, `sessions/${userId}/${sessionId}`), {
+        lastActive: Date.now(),
+      });
+    } catch (error) {
+      console.error('Session güncellenemedi:', error);
+    }
+  }
+
+  static async getActiveSessions(userId: string): Promise<any[]> {
+    try {
+      const snap = await get(ref(db, `sessions/${userId}`));
+      if (!snap.exists()) return [];
+      const data = snap.val();
+      // 5 dakikadan eski session'ları temizle
+      const now = Date.now();
+      const active: any[] = [];
+      for (const [key, value] of Object.entries(data) as [string, any][]) {
+        if (now - value.lastActive < 5 * 60 * 1000) {
+          active.push({ id: key, ...value });
+        } else {
+          // Eski session'ı sil
+          await remove(ref(db, `sessions/${userId}/${key}`));
+        }
+      }
+      return active;
+    } catch (error) {
+      console.error('Session alınamadı:', error);
+      return [];
+    }
+  }
+
+  static async endSession(userId: string, sessionId: string) {
+    try {
+      await remove(ref(db, `sessions/${userId}/${sessionId}`));
+    } catch (error) {
+      console.error('Session silinemedi:', error);
+    }
+  }
+
   // ==================== FAVORİ İŞLEMLERİ ====================
 
   static async addToFavorites(userId: string, channel: Channel) {
     try {
       const channelId = sanitizePath(channel.id);
       const favRef = ref(db, `favorites/${userId}/${channelId}`);
-      
       await set(favRef, {
         channelId: channel.id,
         channel: {
@@ -144,9 +185,7 @@ export class FirebaseService {
     try {
       const favRef = ref(db, `favorites/${userId}`);
       const snapshot = await get(favRef);
-      
       if (!snapshot.exists()) return [];
-      
       const data = snapshot.val();
       const favorites: Favorite[] = Object.entries(data).map(([key, value]: [string, any]) => ({
         id: key,
@@ -155,7 +194,6 @@ export class FirebaseService {
         channel: value.channel,
         addedAt: value.addedAt,
       }));
-      
       favorites.sort((a, b) => b.addedAt - a.addedAt);
       return favorites;
     } catch (error) {
@@ -170,7 +208,6 @@ export class FirebaseService {
     try {
       const channelId = sanitizePath(channel.id);
       const recentRef = ref(db, `recentWatches/${userId}/${channelId}`);
-      
       await set(recentRef, {
         channelId: channel.id,
         channel: {
@@ -182,7 +219,6 @@ export class FirebaseService {
         },
         watchedAt: Date.now(),
       });
-
       await this.cleanupRecentWatches(userId);
     } catch (error) {
       console.error('Son izlenen eklenemedi:', error);
@@ -193,9 +229,7 @@ export class FirebaseService {
     try {
       const recentRef = ref(db, `recentWatches/${userId}`);
       const snapshot = await get(recentRef);
-      
       if (!snapshot.exists()) return [];
-      
       const data = snapshot.val();
       const recentWatches: RecentWatch[] = Object.entries(data).map(([key, value]: [string, any]) => ({
         id: key,
@@ -203,7 +237,6 @@ export class FirebaseService {
         channel: value.channel,
         watchedAt: value.watchedAt,
       }));
-      
       recentWatches.sort((a, b) => b.watchedAt - a.watchedAt);
       return recentWatches.slice(0, 20);
     } catch (error) {
@@ -216,16 +249,12 @@ export class FirebaseService {
     try {
       const recentRef = ref(db, `recentWatches/${userId}`);
       const snapshot = await get(recentRef);
-      
       if (!snapshot.exists()) return;
-      
       const data = snapshot.val();
       const entries = Object.entries(data) as [string, { watchedAt: number }][];
-      
       if (entries.length > 20) {
         entries.sort((a, b) => b[1].watchedAt - a[1].watchedAt);
         const toDelete = entries.slice(20);
-        
         for (const [key] of toDelete) {
           await remove(ref(db, `recentWatches/${userId}/${key}`));
         }
@@ -250,10 +279,7 @@ export class FirebaseService {
     try {
       const userRef = ref(db, `users/${userId}/adultPin`);
       const snapshot = await get(userRef);
-      
-      if (snapshot.exists()) {
-        return snapshot.val();
-      }
+      if (snapshot.exists()) return snapshot.val();
       return null;
     } catch (error) {
       console.error('PIN alınamadı:', error);
