@@ -70,7 +70,7 @@ export default function GizlilikPage() {
 
         <div className="text-center mt-8">
           <p className="text-gray-500 text-xs">
-            Sorularınız için: <a href="https://t.me/mutluadmin" target="_blank" className="text-blue-400 hover:underline">@mutluadmin</a>
+            Sorularınız için: <a href="https://t.me/mutflixadmin" target="_blank" className="text-blue-400 hover:underline">@mutluadmin</a>
           </p>
         </div>
       </div>
