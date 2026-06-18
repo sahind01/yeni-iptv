@@ -7,7 +7,7 @@ import {
   FiHome, FiTv, FiFilm, FiMonitor, 
   FiHeart, FiClock, FiSettings, FiLogOut,
   FiX, FiShield, FiMessageCircle,
-  FiInfo, FiLock, FiSend, FiHelpCircle, FiCalendar
+  FiInfo, FiLock, FiSend, FiHelpCircle, FiCalendar, FiUser, FiEye, FiEyeOff
 } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,11 +42,10 @@ export default function Sidebar() {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (showProfile && userId) {
-      loadProfileData();
-    }
+    if (showProfile && userId) loadProfileData();
   }, [showProfile, userId]);
 
   const loadProfileData = async () => {
@@ -67,9 +66,8 @@ export default function Sidebar() {
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'Bilinmiyor';
-    try {
-      return new Date(dateStr).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-    } catch { return dateStr; }
+    try { return new Date(dateStr).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }); }
+    catch { return dateStr; }
   };
 
   const getDaysLeft = (expireDate: string) => {
@@ -95,6 +93,8 @@ export default function Sidebar() {
   };
 
   const daysLeft = profileData?.expireDate ? getDaysLeft(profileData.expireDate) : 0;
+  const maxViewers = profileData?.maxViewers || 2;
+  const isActive = profileData?.status === 'active' || !profileData?.status;
 
   return (
     <>
@@ -174,7 +174,7 @@ export default function Sidebar() {
           </div>
         </nav>
 
-        {/* PROFİL ALANI - TIKLAYINCA SÜRE BİLGİSİ */}
+        {/* PROFİL ALANI */}
         <div className="p-4 border-t border-gray-800/50">
           <button
             onClick={() => setShowProfile(!showProfile)}
@@ -187,10 +187,10 @@ export default function Sidebar() {
               <p className="text-xs font-medium truncate">{username || 'Kullanıcı'}</p>
               <p className="text-[10px] text-gray-500 truncate">{site || 'IPTV'}</p>
             </div>
-            <FiCalendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+            <FiUser className="w-4 h-4 text-gray-500 flex-shrink-0" />
           </button>
 
-          {/* SÜRE BİLGİSİ POPUP */}
+          {/* PROFİL DETAY POPUP */}
           <AnimatePresence>
             {showProfile && (
               <motion.div
@@ -200,35 +200,72 @@ export default function Sidebar() {
                 className="bg-[#1a1a1a] border border-gray-700 rounded-xl p-4 mb-3"
               >
                 {profileData ? (
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
+                    {/* Kullanıcı Adı */}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Kullanıcı</span>
-                      <span className="text-xs text-white font-medium">{profileData.username}</span>
+                      <span className="text-[11px] text-gray-400">Kullanıcı</span>
+                      <span className="text-[11px] text-white font-medium">{profileData.username}</span>
                     </div>
+
+                    {/* Şifre */}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Cihaz</span>
-                      <span className="text-xs text-white">{profileData.deviceModel || 'Bilinmiyor'}</span>
+                      <span className="text-[11px] text-gray-400">Şifre</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] text-white font-medium">
+                          {showPassword ? profileData.password : '••••••'}
+                        </span>
+                        <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white">
+                          {showPassword ? <FiEyeOff className="w-3 h-3" /> : <FiEye className="w-3 h-3" />}
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Max İzleyici */}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Başlangıç</span>
-                      <span className="text-xs text-white">{formatDate(profileData.createdAt)}</span>
+                      <span className="text-[11px] text-gray-400">Max İzleyici</span>
+                      <span className="text-[11px] text-white font-medium">{maxViewers} kişi</span>
                     </div>
+
+                    {/* Durum */}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Bitiş</span>
-                      <span className="text-xs text-white">{formatDate(profileData.expireDate)}</span>
+                      <span className="text-[11px] text-gray-400">Durum</span>
+                      <span className={`text-[11px] font-medium flex items-center gap-1 ${
+                        isActive ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-400' : 'bg-red-400'}`} />
+                        {isActive ? 'Aktif' : 'Pasif'}
+                      </span>
                     </div>
+
+                    {/* Başlangıç */}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Kalan</span>
-                      <span className={`text-xs font-bold ${
+                      <span className="text-[11px] text-gray-400">Başlangıç</span>
+                      <span className="text-[11px] text-white">{formatDate(profileData.createdAt)}</span>
+                    </div>
+
+                    {/* Bitiş */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">Bitiş</span>
+                      <span className="text-[11px] text-white">{formatDate(profileData.expireDate)}</span>
+                    </div>
+
+                    {/* Kalan Gün */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">Kalan</span>
+                      <span className={`text-[11px] font-bold ${
                         daysLeft <= 3 ? 'text-red-400' : daysLeft <= 7 ? 'text-yellow-400' : 'text-green-400'
                       }`}>
                         {daysLeft} gün
                       </span>
                     </div>
+
+                    {/* İlerleme Çubuğu */}
                     <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                       <div 
-                        className={`h-full rounded-full ${daysLeft <= 3 ? 'bg-red-500' : daysLeft <= 7 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                        style={{ width: `${Math.min(100, Math.max(0, daysLeft / 30 * 100))}%` }}
+                        className={`h-full rounded-full ${
+                          daysLeft <= 3 ? 'bg-red-500' : daysLeft <= 7 ? 'bg-yellow-500' : 'bg-green-500'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(0, (daysLeft / 30) * 100))}%` }}
                       />
                     </div>
                   </div>
