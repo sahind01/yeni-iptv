@@ -31,28 +31,13 @@ export default function LoginPage() {
     if (isAuthReady && isAuthenticated) router.push('/dashboard');
   }, [isAuthReady, isAuthenticated]);
 
-  // 10 SANİYEDE BİR KENDİNİ YENİLEYEN PING SİSTEMİ
-  const startPing = (userId: string) => {
-    const deviceRef = ref(db, `activeDevices/${userId}`);
-    
-    // İlk kaydı oluştur
-    set(deviceRef, {
-      timestamp: Date.now(),
-      active: true,
-    });
-
-    // Sayfa kapanınca sil
-    onDisconnect(deviceRef).remove();
-
-    // Her 10 saniyede bir timestamp güncelle
-    const interval = setInterval(() => {
-      set(ref(db, `activeDevices/${userId}`), {
-        timestamp: Date.now(),
-        active: true,
-      }).catch(() => {});
-    }, 10000);
-
-    return interval;
+  const getDeviceId = () => {
+    let deviceId = localStorage.getItem('mutlu_device_id');
+    if (!deviceId) {
+      deviceId = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      localStorage.setItem('mutlu_device_id', deviceId);
+    }
+    return deviceId;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,7 +54,6 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim();
 
-      // M3U kontrol
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
@@ -77,26 +61,57 @@ export default function LoginPage() {
       const cleanSite = site.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const userId = `${cleanSite}_${cleanUser}`;
+      const deviceId = getDeviceId();
 
-      // CİHAZ KONTROLÜ
-      const deviceRef = ref(db, `activeDevices/${userId}`);
-      const snap = await get(deviceRef);
-
-      if (snap.exists()) {
-        const data = snap.val();
-        const now = Date.now();
-        
-        // 15 saniyeden yeni ping varsa = cihaz aktif
-        if (data.active && now - data.timestamp < 15000) {
-          // BAŞKA CİHAZ AKTİF - AT
+      // 1. LOCALSTORAGE KONTROLÜ - En hızlı
+      const storedDevice = localStorage.getItem(`mutlu_active_${userId}`);
+      const storedTime = localStorage.getItem(`mutlu_active_${userId}_time`);
+      
+      if (storedDevice && storedTime) {
+        const elapsed = Date.now() - parseInt(storedTime);
+        // 30 saniyeden yeniyse ve farklı cihazsa AT
+        if (elapsed < 30000 && storedDevice !== deviceId) {
           window.location.href = 'https://mutlu-iptv.vercel.app';
           return;
         }
       }
 
-      // CİHAZI AKTİF ET VE PING BAŞLAT
-      const pingInterval = startPing(userId);
-      (window as any).__mutluPing = pingInterval;
+      // 2. FIREBASE KONTROLÜ
+      const deviceRef = ref(db, `activeDevices/${userId}/device`);
+      const snap = await get(deviceRef);
+
+      if (snap.exists()) {
+        const fbDevice = snap.val().deviceId;
+        const fbTime = snap.val().timestamp;
+        const elapsed = Date.now() - fbTime;
+        
+        // 30 saniyeden yeni ve farklı cihazsa AT
+        if (elapsed < 30000 && fbDevice !== deviceId) {
+          window.location.href = 'https://mutlu-iptv.vercel.app';
+          return;
+        }
+      }
+
+      // CİHAZI KAYDET - Hem localStorage hem Firebase
+      localStorage.setItem(`mutlu_active_${userId}`, deviceId);
+      localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
+
+      await set(deviceRef, {
+        deviceId: deviceId,
+        timestamp: Date.now(),
+      });
+
+      // Sayfa kapanınca Firebase'den sil
+      onDisconnect(deviceRef).remove();
+
+      // 30 saniyede bir localStorage'ı güncelle (sayfa açık kaldıkça)
+      const keepAlive = setInterval(() => {
+        localStorage.setItem(`mutlu_active_${userId}`, deviceId);
+        localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
+        set(deviceRef, { deviceId: deviceId, timestamp: Date.now() }).catch(() => {});
+      }, 15000);
+
+      (window as any).__mutluKeepAlive = keepAlive;
 
       // M3U çek
       const m3uContent = await response.text();
