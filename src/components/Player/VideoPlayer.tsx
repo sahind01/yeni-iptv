@@ -10,7 +10,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const hlsRef = useRef<Hls | null>(null);
   const { currentChannel } = useStore();
 
-  const [state, setState] = useState({
+  const [playerState, setPlayerState] = useState({
     isPlaying: false,
     isMuted: false,
     volume: 1,
@@ -21,12 +21,10 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     showControls: true,
   });
 
-  // Player başlat
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
 
-    // Önceki player'ı temizle
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -34,7 +32,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
     const url = currentChannel.url;
 
-    // HLS mi kontrol et (.m3u8)
     if (url.includes('.m3u8') && Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
@@ -48,21 +45,19 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch(() => {});
-        setState(prev => ({ ...prev, error: null }));
+        setPlayerState(prev => ({ ...prev, error: null }));
       });
 
       hls.on(Hls.Events.ERROR, () => {
-        // HLS hatası - direkt MP4 olarak dene
         video.src = url;
         video.load();
         video.play().catch(() => {});
       });
     } else {
-      // MP4/TS/Diğer formatlar
       video.src = url;
       video.load();
       video.play().catch(() => {
-        setState(prev => ({ ...prev, error: 'Yayın açılamadı, tekrar deneniyor...' }));
+        setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı, tekrar deneniyor...' }));
         setTimeout(() => {
           video.load();
           video.play().catch(() => {});
@@ -78,19 +73,18 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     };
   }, [currentChannel?.url]);
 
-  // Video events
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const onPlay = () => setState(prev => ({ ...prev, isPlaying: true, error: null }));
-    const onPause = () => setState(prev => ({ ...prev, isPlaying: false }));
-    const onTimeUpdate = () => setState(prev => ({ ...prev, currentTime: video.currentTime }));
-    const onDuration = () => setState(prev => ({ ...prev, duration: video.duration }));
-    const onVolume = () => setState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
-    const onError = () => setState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-    const onWaiting = () => setState(prev => ({ ...prev, error: 'Yükleniyor...' }));
-    const onCanPlay = () => setState(prev => ({ ...prev, error: null }));
+    const onPlay = () => setPlayerState(prev => ({ ...prev, isPlaying: true, error: null }));
+    const onPause = () => setPlayerState(prev => ({ ...prev, isPlaying: false }));
+    const onTimeUpdate = () => setPlayerState(prev => ({ ...prev, currentTime: video.currentTime }));
+    const onDuration = () => setPlayerState(prev => ({ ...prev, duration: video.duration }));
+    const onVolume = () => setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
+    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+    const onWaiting = () => setPlayerState(prev => ({ ...prev, error: 'Yükleniyor...' }));
+    const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
 
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -113,10 +107,31 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     };
   }, []);
 
-  const togglePlay = () => videoRef.current?.[state.isPlaying ? 'pause' : 'play']();
-  const toggleMute = () => { if (videoRef.current) videoRef.current.muted = !state.isMuted; };
-  const changeVolume = (v: number) => { if (videoRef.current) videoRef.current.volume = v; };
-  const toggleFullscreen = () => document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen();
+  const togglePlay = () => {
+    if (videoRef.current) {
+      videoRef.current[playerState.isPlaying ? 'pause' : 'play']();
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !playerState.isMuted;
+    }
+  };
+
+  const changeVolume = (v: number) => {
+    if (videoRef.current) {
+      videoRef.current.volume = v;
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      containerRef.current?.requestFullscreen();
+    }
+  };
 
   const formatTime = (t: number) => {
     if (!isFinite(t) || t < 0) return '0:00';
@@ -126,36 +141,74 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   };
 
   if (!currentChannel) {
-    return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
+    return (
+      <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl">
+        <p className="text-gray-500">Kanal seçilmedi</p>
+      </div>
+    );
   }
 
   return (
-    <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-      <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay controls={false} />
+    <div
+      ref={containerRef}
+      className="relative w-full bg-black overflow-hidden rounded-xl"
+      style={{ aspectRatio: '16/9' }}
+    >
+      <video
+        ref={videoRef}
+        className="w-full h-full object-contain"
+        playsInline
+        autoPlay
+      />
 
-      {/* Hata */}
-      {state.error && (
+      {playerState.error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
           <div className="text-center">
-            <p className="text-gray-300 text-sm mb-2">{state.error}</p>
-            <button onClick={() => { if(videoRef.current) { videoRef.current.load(); videoRef.current.play().catch(()=>{}); } }} className="px-4 py-1.5 bg-blue-500 rounded-lg text-xs">Tekrar Dene</button>
+            <p className="text-gray-300 text-sm mb-2">{playerState.error}</p>
+            <button
+              onClick={() => {
+                if (videoRef.current) {
+                  videoRef.current.load();
+                  videoRef.current.play().catch(() => {});
+                }
+              }}
+              className="px-4 py-1.5 bg-blue-500 rounded-lg text-xs"
+            >
+              Tekrar Dene
+            </button>
           </div>
         </div>
       )}
 
-      {/* Üst bar */}
-      <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent z-10" onClick={e => e.stopPropagation()}>
-        {onBack && <button onClick={onBack} className="text-sm">← Geri</button>}
+      <div
+        className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent z-10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {onBack && (
+          <button onClick={onBack} className="text-sm hover:text-gray-300">
+            ← Geri
+          </button>
+        )}
         <p className="text-xs font-medium mt-1">{currentChannel.name}</p>
       </div>
 
-      {/* Alt bar */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent z-10" onClick={e => e.stopPropagation()}>
+      <div
+        className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent z-10"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between">
-          <button onClick={togglePlay} className="p-1 text-sm">{state.isPlaying ? '⏸' : '▶️'}</button>
-          <button onClick={toggleMute} className="p-1 text-sm">{state.isMuted ? '🔇' : '🔊'}</button>
-          <span className="text-xs">{formatTime(state.currentTime)} / {formatTime(state.duration)}</span>
-          <button onClick={toggleFullscreen} className="p-1 text-sm">⛶</button>
+          <button onClick={togglePlay} className="p-1 text-sm">
+            {playerState.isPlaying ? '⏸' : '▶️'}
+          </button>
+          <button onClick={toggleMute} className="p-1 text-sm">
+            {playerState.isMuted ? '🔇' : '🔊'}
+          </button>
+          <span className="text-xs">
+            {formatTime(playerState.currentTime)} / {formatTime(playerState.duration)}
+          </span>
+          <button onClick={toggleFullscreen} className="p-1 text-sm">
+            ⛶
+          </button>
         </div>
       </div>
     </div>
