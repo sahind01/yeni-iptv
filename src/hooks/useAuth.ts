@@ -16,29 +16,32 @@ export function useAuth() {
     setError(null);
     
     try {
-      // M3U API kontrolü
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       
-      if (!response.ok) {
-        throw new Error('Kullanıcı adı veya şifre hatalı');
-      }
+      if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
       const m3uContent = await response.text();
       
-      if (!m3uContent.includes('#EXTM3U')) {
-        throw new Error('Geçersiz M3U yanıtı');
-      }
+      if (!m3uContent.includes('#EXTM3U')) throw new Error('Geçersiz M3U yanıtı');
 
-      // Firebase'e kaydet
-      const userId = await FirebaseService.loginUser(site, username, password);
-
-      // Kanalları parse et
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
       setChannels(channels);
 
-      // Store'a kaydet (4 parametre)
+      const userId = username;
+      
+      const userData = await FirebaseService.getUserData(userId);
+      
+      if (userData) {
+        if (userData.password !== password) throw new Error('Hatalı şifre');
+        if (userData.expireDate) {
+          const expire = new Date(userData.expireDate).getTime();
+          if (Date.now() > expire) throw new Error('Süreniz dolmuştur');
+        }
+        await FirebaseService.updateLastLogin(userId);
+      }
+
       login(userId, username, site, password);
       setAuthReady(true);
       router.push('/dashboard');
@@ -48,13 +51,13 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
-  }, [login, setChannels, setLoading, setAuthReady, router]);
+  }, []);
 
   const handleLogout = useCallback(() => {
     storeLogout();
     setAuthReady(true);
     router.push('/login');
-  }, [storeLogout, setAuthReady, router]);
+  }, []);
 
   return {
     error,
