@@ -95,7 +95,7 @@ export default function AdultPage() {
       setIsLoading(true);
       setError('');
       
-      const response = await fetch('https://gist.githubusercontent.com/alexpekt/dc11067cd5dca6e0dd2b1ee99fd743d5/raw/da511ed0ea129dcc6490fc00a1503b237ad86b0e/IPTV_SHARED.M3U', { cache: 'no-store' });
+      const response = await fetch('https://raw.githubusercontent.com/hushujiang/hushujiang.github.io/521bf4b5e9394397a55f55b6236574edac7d2b5f/zb2.txt', { cache: 'no-store' });
       if (!response.ok) throw new Error('Liste alınamadı');
       
       const text = await response.text();
