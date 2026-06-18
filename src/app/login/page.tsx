@@ -10,19 +10,29 @@ import { M3UParser } from '@/services/m3u-parser';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated, isAuthReady, login: storeLogin, setChannels, setAuthReady, username: savedUser, site: savedSite, password: savedPass } = useStore();
-
-  const [formData, setFormData] = useState({ site: savedSite || '', username: savedUser || '', password: savedPass || '' });
+  const { 
+    isAuthenticated, isAuthReady,
+    login: storeLogin, setChannels, setAuthReady,
+    username: savedUser, site: savedSite, password: savedPass,
+  } = useStore();
+  
+  const [formData, setFormData] = useState({
+    site: savedSite || '',
+    username: savedUser || '',
+    password: savedPass || '',
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => { if (isAuthReady && isAuthenticated) router.push('/dashboard'); }, [isAuthReady, isAuthenticated]);
+  useEffect(() => {
+    if (isAuthReady && isAuthenticated) router.push('/dashboard');
+  }, [isAuthReady, isAuthenticated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
+    if (!formData.site.trim()) { setError('Site adı gerekli'); return; }
     if (!formData.username.trim()) { setError('Kullanıcı adı gerekli'); return; }
     if (!formData.password.trim()) { setError('Şifre gerekli'); return; }
 
@@ -31,38 +41,31 @@ export default function LoginPage() {
     try {
       const username = formData.username.trim();
       const password = formData.password.trim();
-      const site = formData.site.trim() || 'IPTV';
+      const site = formData.site.trim();
 
-      // 1. M3U API kontrolü
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
-
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
-      // 2. Eş zamanlı kullanıcı kontrolü (MAX 2)
-      const userId = `${site}_${username}`.toLowerCase().replace(/\s+/g, '_');
-      const activeUsers = await FirebaseService.getActiveSessions(userId);
-      
-      // Kendi session'ını sayma, sadece aktif diğer kullanıcıları say
-      const otherActiveUsers = activeUsers.filter((s: any) => {
-        // 5 dakikadan eski session'ları sayma
-        return (Date.now() - s.lastActive) < 5 * 60 * 1000;
-      });
+      const cleanSite = site.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const userId = `${cleanSite}_${cleanUser}`;
 
-      if (otherActiveUsers.length >= 1) {
-        // 3. kişi - yönlendir
+      const deviceCount = await FirebaseService.getActiveDeviceCount(userId);
+
+      if (deviceCount >= 1) {
         window.location.href = 'https://mutlu-iptv.vercel.app';
         return;
       }
 
-      // 3. Session başlat
-      await FirebaseService.startSession(userId);
+      const deviceId = await FirebaseService.addActiveDevice(userId);
+      localStorage.setItem('mutlu_device_id', deviceId);
+      localStorage.setItem('mutlu_user_id', userId);
 
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
 
-      // Firebase'e kaydet
       await FirebaseService.loginUser(site, username, password);
 
       storeLogin(userId, username, site, password);
@@ -71,7 +74,7 @@ export default function LoginPage() {
       router.push('/dashboard');
 
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Giriş başarısız');
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +86,11 @@ export default function LoginPage() {
   };
 
   if (!isAuthReady) {
-    return <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center"><div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>;
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -93,14 +100,16 @@ export default function LoginPage() {
           <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center">
             <span className="text-3xl">📺</span>
           </div>
-          <h1 className="text-3xl font-bold"><span className="bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">Mutlu Player</span></h1>
+          <h1 className="text-3xl font-bold">
+            <span className="bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">Mutlu Player</span>
+          </h1>
           <p className="text-gray-400 mt-2">Premium IPTV Deneyimi</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="glass-card p-6 space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Site</label>
+              <label className="block text-sm text-gray-400 mb-1.5">Site Adı</label>
               <div className="relative">
                 <FiServer className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input type="text" name="site" value={formData.site} onChange={handleChange} placeholder="Mutlu IPTV" className="input-field pl-10" autoComplete="off" />
@@ -118,7 +127,9 @@ export default function LoginPage() {
               <div className="relative">
                 <FiLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} placeholder="••••••••" className="input-field pl-10 pr-10" autoComplete="current-password" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">{showPassword ? <FiEyeOff /> : <FiEye />}</button>
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                  {showPassword ? <FiEyeOff /> : <FiEye />}
+                </button>
               </div>
             </div>
             {error && <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">{error}</div>}
@@ -127,6 +138,9 @@ export default function LoginPage() {
             </button>
           </div>
         </form>
+        <div className="mt-6 text-center text-sm text-gray-500">
+          <p>Tek cihaz desteği</p>
+        </div>
       </motion.div>
     </div>
   );
