@@ -7,8 +7,6 @@ import { FiUser, FiLock, FiServer, FiEye, FiEyeOff } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { M3UParser } from '@/services/m3u-parser';
-import { ref, get, set, onDisconnect } from 'firebase/database';
-import { db } from '@/services/firebase';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,40 +26,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!isAuthReady) return;
-    
-    if (isAuthenticated) {
-      const uid = useStore.getState().userId;
-      const deviceId = localStorage.getItem('mutlu_device_id');
-      
-      if (uid && deviceId) {
-        const storedDevice = localStorage.getItem(`mutlu_active_${uid}`);
-        const storedTime = localStorage.getItem(`mutlu_active_${uid}_time`);
-        
-        if (storedDevice && storedTime) {
-          const elapsed = Date.now() - parseInt(storedTime);
-          if (elapsed < 30000 && storedDevice !== deviceId) {
-            // BAŞKA CİHAZ - TEMİZLE VE AT
-            localStorage.clear();
-            sessionStorage.clear();
-            useStore.getState().logout();
-            window.location.href = 'https://mutlu-iptv.vercel.app';
-            return;
-          }
-        }
-      }
-      router.push('/dashboard');
-    }
+    if (isAuthReady && isAuthenticated) router.push('/dashboard');
   }, [isAuthReady, isAuthenticated]);
-
-  const getDeviceId = () => {
-    let deviceId = localStorage.getItem('mutlu_device_id');
-    if (!deviceId) {
-      deviceId = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      localStorage.setItem('mutlu_device_id', deviceId);
-    }
-    return deviceId;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,46 +50,6 @@ export default function LoginPage() {
       const cleanSite = site.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const userId = `${cleanSite}_${cleanUser}`;
-      const deviceId = getDeviceId();
-
-      // LOCALSTORAGE KONTROL
-      const storedDevice = localStorage.getItem(`mutlu_active_${userId}`);
-      const storedTime = localStorage.getItem(`mutlu_active_${userId}_time`);
-
-      if (storedDevice && storedTime) {
-        const elapsed = Date.now() - parseInt(storedTime);
-        if (elapsed < 30000 && storedDevice !== deviceId) {
-          window.location.href = 'https://mutlu-iptv.vercel.app';
-          return;
-        }
-      }
-
-      // FIREBASE KONTROL
-      const deviceRef = ref(db, `activeDevices/${userId}/device`);
-      const snap = await get(deviceRef);
-
-      if (snap.exists()) {
-        const data = snap.val();
-        const elapsed = Date.now() - data.timestamp;
-        if (elapsed < 30000 && data.deviceId !== deviceId) {
-          window.location.href = 'https://mutlu-iptv.vercel.app';
-          return;
-        }
-      }
-
-      // KAYDET
-      localStorage.setItem(`mutlu_active_${userId}`, deviceId);
-      localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
-
-      await set(deviceRef, { deviceId, timestamp: Date.now() });
-      onDisconnect(deviceRef).remove();
-
-      const keepAlive = setInterval(() => {
-        localStorage.setItem(`mutlu_active_${userId}`, deviceId);
-        localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
-        set(deviceRef, { deviceId, timestamp: Date.now() }).catch(() => {});
-      }, 15000);
-      (window as any).__mutluKeepAlive = keepAlive;
 
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
@@ -201,9 +127,6 @@ export default function LoginPage() {
             </button>
           </div>
         </form>
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Tek cihaz desteği</p>
-        </div>
       </motion.div>
     </div>
   );
