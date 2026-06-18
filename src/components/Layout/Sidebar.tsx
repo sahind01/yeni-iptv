@@ -1,16 +1,19 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiHome, FiTv, FiFilm, FiMonitor, 
   FiHeart, FiClock, FiSettings, FiLogOut,
   FiX, FiShield, FiMessageCircle,
-  FiInfo, FiLock, FiSend, FiHelpCircle
+  FiInfo, FiLock, FiSend, FiHelpCircle, FiCalendar
 } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { useAuth } from '@/hooks/useAuth';
+import { FirebaseService } from '@/services/firebase';
+import { ref, get } from 'firebase/database';
+import { db } from '@/services/firebase';
 
 const menuItems = [
   { id: 'dashboard', label: 'Ana Sayfa', icon: FiHome, path: '/dashboard' },
@@ -34,9 +37,47 @@ const extraLinks = [
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { sidebarOpen, setSidebarOpen, username, site } = useStore();
+  const { sidebarOpen, setSidebarOpen, username, site, userId } = useStore();
   const { logout } = useAuth();
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileData, setProfileData] = useState<any>(null);
+
+  useEffect(() => {
+    if (showProfile && userId) {
+      loadProfileData();
+    }
+  }, [showProfile, userId]);
+
+  const loadProfileData = async () => {
+    if (!userId) return;
+    const allUsersRef = ref(db, 'users');
+    const allSnap = await get(allUsersRef);
+    if (allSnap.exists()) {
+      const allUsers = allSnap.val();
+      for (const [key, value] of Object.entries(allUsers)) {
+        const user = value as any;
+        if (user.username === username) {
+          setProfileData({ ...user, key });
+          break;
+        }
+      }
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'Bilinmiyor';
+    try {
+      return new Date(dateStr).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+    } catch { return dateStr; }
+  };
+
+  const getDaysLeft = (expireDate: string) => {
+    if (!expireDate) return 0;
+    const expire = new Date(expireDate).getTime();
+    const now = Date.now();
+    return Math.max(0, Math.ceil((expire - now) / (1000 * 60 * 60 * 24)));
+  };
 
   const handleNavigate = (path: string) => {
     router.push(path);
@@ -52,6 +93,8 @@ export default function Sidebar() {
     await logout();
     setSidebarOpen(false);
   };
+
+  const daysLeft = profileData?.expireDate ? getDaysLeft(profileData.expireDate) : 0;
 
   return (
     <>
@@ -131,16 +174,73 @@ export default function Sidebar() {
           </div>
         </nav>
 
+        {/* PROFİL ALANI - TIKLAYINCA SÜRE BİLGİSİ */}
         <div className="p-4 border-t border-gray-800/50">
-          <div className="flex items-center space-x-3 mb-3 p-3 bg-white/5 rounded-xl">
+          <button
+            onClick={() => setShowProfile(!showProfile)}
+            className="w-full flex items-center space-x-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all mb-3"
+          >
             <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-bold">{username?.charAt(0)?.toUpperCase() || 'U'}</span>
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 text-left">
               <p className="text-xs font-medium truncate">{username || 'Kullanıcı'}</p>
               <p className="text-[10px] text-gray-500 truncate">{site || 'IPTV'}</p>
             </div>
-          </div>
+            <FiCalendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          </button>
+
+          {/* SÜRE BİLGİSİ POPUP */}
+          <AnimatePresence>
+            {showProfile && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="bg-[#1a1a1a] border border-gray-700 rounded-xl p-4 mb-3"
+              >
+                {profileData ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Kullanıcı</span>
+                      <span className="text-xs text-white font-medium">{profileData.username}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Cihaz</span>
+                      <span className="text-xs text-white">{profileData.deviceModel || 'Bilinmiyor'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Başlangıç</span>
+                      <span className="text-xs text-white">{formatDate(profileData.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Bitiş</span>
+                      <span className="text-xs text-white">{formatDate(profileData.expireDate)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Kalan</span>
+                      <span className={`text-xs font-bold ${
+                        daysLeft <= 3 ? 'text-red-400' : daysLeft <= 7 ? 'text-yellow-400' : 'text-green-400'
+                      }`}>
+                        {daysLeft} gün
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full ${daysLeft <= 3 ? 'bg-red-500' : daysLeft <= 7 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                        style={{ width: `${Math.min(100, Math.max(0, daysLeft / 30 * 100))}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-center py-3">
+                    <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <button onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors text-sm">
             <FiLogOut className="w-4 h-4" />
             <span>Çıkış Yap</span>
