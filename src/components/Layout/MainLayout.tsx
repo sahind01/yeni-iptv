@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
-import { ref, get } from 'firebase/database';
-import { db } from '@/services/firebase';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import BottomNav from './BottomNav';
@@ -15,61 +13,13 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const { isAuthenticated, isAuthReady, userId, logout } = useStore();
+  const { isAuthenticated, isAuthReady } = useStore();
 
   useEffect(() => {
     if (isAuthReady && !isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthReady, isAuthenticated]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !userId) return;
-    if (pathname === '/login') return;
-
-    const checkDevice = async () => {
-      const deviceId = localStorage.getItem('mutlu_device_id');
-      const storedDevice = localStorage.getItem(`mutlu_active_${userId}`);
-      const storedTime = localStorage.getItem(`mutlu_active_${userId}_time`);
-
-      if (storedDevice && storedTime && deviceId) {
-        const elapsed = Date.now() - parseInt(storedTime);
-        if (elapsed < 30000 && storedDevice !== deviceId) {
-          // HER ŞEYİ TEMİZLE VE SİTEYE AT
-          localStorage.clear();
-          sessionStorage.clear();
-          logout();
-          window.location.href = 'https://mutlu-iptv.vercel.app';
-          return;
-        }
-      }
-
-      try {
-        const deviceRef = ref(db, `activeDevices/${userId}/device`);
-        const snap = await get(deviceRef);
-        
-        if (snap.exists()) {
-          const data = snap.val();
-          const elapsed = Date.now() - data.timestamp;
-          
-          if (elapsed < 30000 && data.deviceId !== deviceId) {
-            // HER ŞEYİ TEMİZLE VE SİTEYE AT
-            localStorage.clear();
-            sessionStorage.clear();
-            logout();
-            window.location.href = 'https://mutlu-iptv.vercel.app';
-            return;
-          }
-        }
-      } catch (e) {}
-
-      localStorage.setItem(`mutlu_active_${userId}`, deviceId || '');
-      localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
-    };
-
-    checkDevice();
-  }, [pathname, isAuthenticated, userId]);
 
   if (!isAuthReady) {
     return (
