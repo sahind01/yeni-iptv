@@ -38,21 +38,12 @@ export class FirebaseService {
       const userId = `${cleanSite}_${cleanUsername}`;
       const userRef = ref(db, `users/${userId}`);
       const snapshot = await get(userRef);
-
       if (!snapshot.exists()) {
         await set(userRef, {
-          username: username,
-          site: site,
-          password: password,
+          username, site, password,
           createdAt: Date.now(),
           lastLogin: Date.now(),
-          settings: {
-            theme: 'dark',
-            autoPlay: true,
-            preferredQuality: 'auto',
-            language: 'tr',
-            bufferSize: 30,
-          }
+          settings: { theme: 'dark', autoPlay: true, preferredQuality: 'auto', language: 'tr', bufferSize: 30 }
         });
       } else {
         const userData = snapshot.val();
@@ -68,11 +59,14 @@ export class FirebaseService {
 
   static async getUserData(userId: string) {
     try {
-      const userRef = ref(db, `users/${userId}`);
-      const snapshot = await get(userRef);
+      const snapshot = await get(ref(db, `users/${userId}`));
       if (snapshot.exists()) return snapshot.val();
       return null;
     } catch (error) { return null; }
+  }
+
+  static async updateLastLogin(userId: string) {
+    try { await update(ref(db, `users/${userId}`), { lastLogin: Date.now() }); } catch (error) {}
   }
 
   static async updateUserSettings(userId: string, settings: Partial<UserSettings>) {
@@ -85,8 +79,7 @@ export class FirebaseService {
 
   static async getUserExpiry(userId: string): Promise<{ startDate: number; expiryDate: number } | null> {
     try {
-      const userRef = ref(db, `users/${userId}`);
-      const snapshot = await get(userRef);
+      const snapshot = await get(ref(db, `users/${userId}`));
       if (snapshot.exists()) {
         const data = snapshot.val();
         if (data.startDate && data.expiryDate) return { startDate: data.startDate, expiryDate: data.expiryDate };
@@ -97,8 +90,7 @@ export class FirebaseService {
 
   static async addToFavorites(userId: string, channel: Channel) {
     try {
-      const channelId = sanitizePath(channel.id);
-      await set(ref(db, `favorites/${userId}/${channelId}`), {
+      await set(ref(db, `favorites/${userId}/${sanitizePath(channel.id)}`), {
         channelId: channel.id,
         channel: { id: channel.id, name: channel.name, logo: channel.logo, group: channel.group, quality: channel.quality },
         addedAt: Date.now(),
@@ -125,8 +117,7 @@ export class FirebaseService {
 
   static async addRecentWatch(userId: string, channel: Channel) {
     try {
-      const channelId = sanitizePath(channel.id);
-      await set(ref(db, `recentWatches/${userId}/${channelId}`), {
+      await set(ref(db, `recentWatches/${userId}/${sanitizePath(channel.id)}`), {
         channelId: channel.id,
         channel: { id: channel.id, name: channel.name, logo: channel.logo, group: channel.group, quality: channel.quality },
         watchedAt: Date.now(),
