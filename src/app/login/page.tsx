@@ -7,7 +7,7 @@ import { FiUser, FiLock, FiServer, FiEye, FiEyeOff } from 'react-icons/fi';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { M3UParser } from '@/services/m3u-parser';
-import { ref, get, set, remove, onDisconnect, onValue } from 'firebase/database';
+import { ref, get, set, remove, onDisconnect } from 'firebase/database';
 import { db } from '@/services/firebase';
 
 export default function LoginPage() {
@@ -31,91 +31,28 @@ export default function LoginPage() {
     if (isAuthReady && isAuthenticated) router.push('/dashboard');
   }, [isAuthReady, isAuthenticated]);
 
-  const getDeviceInfo = () => {
-    const ua = navigator.userAgent;
-    const screen = `${window.screen.width}x${window.screen.height}`;
-    const lang = navigator.language;
-    const platform = navigator.platform;
-    const vendor = navigator.vendor || '';
-    const gpu = (() => {
-      try {
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl') || (canvas as any).getContext('experimental-webgl');
-        if (gl) {
-          const debugInfo = (gl as any).getExtension('WEBGL_debug_renderer_info');
-          if (debugInfo) return (gl as any).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-        }
-      } catch (e) {}
-      return '';
-    })();
-
-    const fingerprint = `${ua}|${screen}|${lang}|${platform}|${vendor}|${gpu}`;
-    let hash = 0;
-    for (let i = 0; i < fingerprint.length; i++) {
-      const char = fingerprint.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash |= 0;
-    }
-    return `dev_${Math.abs(hash).toString(36)}`;
-  };
-
-  const checkAndSetDevice = async (userId: string): Promise<boolean> => {
-    const deviceId = getDeviceInfo();
-    const now = Date.now();
+  // 10 SANİYEDE BİR KENDİNİ YENİLEYEN PING SİSTEMİ
+  const startPing = (userId: string) => {
     const deviceRef = ref(db, `activeDevices/${userId}`);
-    const snap = await get(deviceRef);
-
-    if (snap.exists()) {
-      const data = snap.val();
-      const devices = Object.entries(data) as [string, any][];
-      
-      // 10 dakikadan eski cihazları temizle
-      for (const [key, value] of devices) {
-        if (now - value.timestamp > 10 * 60 * 1000) {
-          try { await remove(ref(db, `activeDevices/${userId}/${key}`)); } catch (e) {}
-        }
-      }
-
-      // Güncel cihazları kontrol et
-      const freshDevices = devices.filter(([key, value]) => now - value.timestamp <= 10 * 60 * 1000);
-      
-      if (freshDevices.length >= 1) {
-        // Aynı cihaz mı kontrol et
-        const isSameDevice = freshDevices.some(([key, value]) => value.deviceId === deviceId);
-        
-        if (isSameDevice) {
-          // Aynı cihaz - timestamp güncelle
-          const existingKey = freshDevices.find(([key, value]) => value.deviceId === deviceId)?.[0];
-          if (existingKey) {
-            await set(ref(db, `activeDevices/${userId}/${existingKey}`), {
-              deviceId,
-              timestamp: now,
-              screen: `${window.screen.width}x${window.screen.height}`,
-              browser: navigator.userAgent.substring(0, 100),
-            });
-          }
-          return true;
-        } else {
-          // Farklı cihaz - giriş RED
-          return false;
-        }
-      }
-    }
-
-    // Yeni cihaz kaydet
-    const deviceKey = `device_${now}`;
-    await set(ref(db, `activeDevices/${userId}/${deviceKey}`), {
-      deviceId,
-      timestamp: now,
-      screen: `${window.screen.width}x${window.screen.height}`,
-      browser: navigator.userAgent.substring(0, 100),
+    
+    // İlk kaydı oluştur
+    set(deviceRef, {
+      timestamp: Date.now(),
+      active: true,
     });
 
-    // Sayfa kapanınca bu cihazı sil
-    const disconnectRef = ref(db, `activeDevices/${userId}/${deviceKey}`);
-    onDisconnect(disconnectRef).remove();
+    // Sayfa kapanınca sil
+    onDisconnect(deviceRef).remove();
 
-    return true;
+    // Her 10 saniyede bir timestamp güncelle
+    const interval = setInterval(() => {
+      set(ref(db, `activeDevices/${userId}`), {
+        timestamp: Date.now(),
+        active: true,
+      }).catch(() => {});
+    }, 10000);
+
+    return interval;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -132,6 +69,7 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim();
 
+      // M3U kontrol
       const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
@@ -140,13 +78,27 @@ export default function LoginPage() {
       const cleanUser = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const userId = `${cleanSite}_${cleanUser}`;
 
-      const allowed = await checkAndSetDevice(userId);
+      // CİHAZ KONTROLÜ
+      const deviceRef = ref(db, `activeDevices/${userId}`);
+      const snap = await get(deviceRef);
 
-      if (!allowed) {
-        window.location.href = 'https://mutlu-iptv.vercel.app';
-        return;
+      if (snap.exists()) {
+        const data = snap.val();
+        const now = Date.now();
+        
+        // 15 saniyeden yeni ping varsa = cihaz aktif
+        if (data.active && now - data.timestamp < 15000) {
+          // BAŞKA CİHAZ AKTİF - AT
+          window.location.href = 'https://mutlu-iptv.vercel.app';
+          return;
+        }
       }
 
+      // CİHAZI AKTİF ET VE PING BAŞLAT
+      const pingInterval = startPing(userId);
+      (window as any).__mutluPing = pingInterval;
+
+      // M3U çek
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
