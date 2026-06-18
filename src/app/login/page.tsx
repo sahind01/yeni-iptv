@@ -27,23 +27,24 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // LOGIN SAYFASINDAYKEN DE KONTROL ET
   useEffect(() => {
     if (!isAuthReady) return;
     
-    // Eğer zaten giriş yapmışsa ve farklı cihaz varsa AT
     if (isAuthenticated) {
-      const userId = useStore.getState().userId;
+      const uid = useStore.getState().userId;
       const deviceId = localStorage.getItem('mutlu_device_id');
       
-      if (userId && deviceId) {
-        const storedDevice = localStorage.getItem(`mutlu_active_${userId}`);
-        const storedTime = localStorage.getItem(`mutlu_active_${userId}_time`);
+      if (uid && deviceId) {
+        const storedDevice = localStorage.getItem(`mutlu_active_${uid}`);
+        const storedTime = localStorage.getItem(`mutlu_active_${uid}_time`);
         
         if (storedDevice && storedTime) {
           const elapsed = Date.now() - parseInt(storedTime);
           if (elapsed < 30000 && storedDevice !== deviceId) {
-            localStorage.removeItem('mutlu_player_storage');
+            // BAŞKA CİHAZ - TEMİZLE VE AT
+            localStorage.clear();
+            sessionStorage.clear();
+            useStore.getState().logout();
             window.location.href = 'https://mutlu-iptv.vercel.app';
             return;
           }
@@ -85,7 +86,7 @@ export default function LoginPage() {
       const userId = `${cleanSite}_${cleanUser}`;
       const deviceId = getDeviceId();
 
-      // KONTROL: localStorage
+      // LOCALSTORAGE KONTROL
       const storedDevice = localStorage.getItem(`mutlu_active_${userId}`);
       const storedTime = localStorage.getItem(`mutlu_active_${userId}_time`);
 
@@ -97,7 +98,7 @@ export default function LoginPage() {
         }
       }
 
-      // KONTROL: Firebase
+      // FIREBASE KONTROL
       const deviceRef = ref(db, `activeDevices/${userId}/device`);
       const snap = await get(deviceRef);
 
@@ -117,7 +118,6 @@ export default function LoginPage() {
       await set(deviceRef, { deviceId, timestamp: Date.now() });
       onDisconnect(deviceRef).remove();
 
-      // 15 saniyede bir güncelle
       const keepAlive = setInterval(() => {
         localStorage.setItem(`mutlu_active_${userId}`, deviceId);
         localStorage.setItem(`mutlu_active_${userId}_time`, Date.now().toString());
@@ -125,7 +125,6 @@ export default function LoginPage() {
       }, 15000);
       (window as any).__mutluKeepAlive = keepAlive;
 
-      // M3U çek
       const m3uContent = await response.text();
       const parser = M3UParser.getInstance();
       const channels = parser.parse(m3uContent);
