@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
+import { FirebaseService } from '@/services/firebase';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import BottomNav from './BottomNav';
@@ -13,13 +14,39 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   const router = useRouter();
-  const { isAuthenticated, isAuthReady } = useStore();
+  const { isAuthenticated, isAuthReady, userId, logout } = useStore();
 
   useEffect(() => {
-    if (isAuthReady && !isAuthenticated) {
-      router.push('/login');
-    }
+    if (isAuthReady && !isAuthenticated) router.push('/login');
   }, [isAuthReady, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+
+    const checkUser = async () => {
+      const userData = await FirebaseService.getUserData(userId);
+      
+      if (!userData) {
+        localStorage.clear();
+        sessionStorage.clear();
+        logout();
+        window.location.href = '/login';
+        return;
+      }
+
+      if (userData.expiryDate && Date.now() > userData.expiryDate) {
+        localStorage.clear();
+        sessionStorage.clear();
+        logout();
+        window.location.href = '/login';
+        return;
+      }
+    };
+
+    checkUser();
+    const interval = setInterval(checkUser, 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, userId]);
 
   if (!isAuthReady) {
     return (
@@ -29,9 +56,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
