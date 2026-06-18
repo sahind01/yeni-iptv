@@ -76,7 +76,7 @@ export default function AdultPage() {
   const fetchChannels = async () => {
     try {
       setIsLoading(true); setError('');
-      const res = await fetch('https://gist.githubusercontent.com/alexpekt/dc11067cd5dca6e0dd2b1ee99fd743d5/raw/da511ed0ea129dcc6490fc00a1503b237ad86b0e/IPTV_SHARED.M3U', { cache: 'no-store' });
+      const res = await fetch('https://raw.githubusercontent.com/caonimagfw/tv-box/ae3579019efafaccbc755f3aed5a1c55a4e88e53/eklins_fdtv/tv/xxx.m3u', { cache: 'no-store' });
       if (!res.ok) throw new Error('Liste alınamadı');
       const text = await res.text();
       const parsed = parseM3U(text);
