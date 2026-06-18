@@ -11,7 +11,7 @@ export default function DashboardPage() {
   const { userId, channels } = useStore();
   const [favoriteCount, setFavoriteCount] = useState(0);
   const [recentCount, setRecentCount] = useState(0);
-  const [userExpiry, setUserExpiry] = useState<{ startDate: number; expiryDate: number } | null>(null);
+  const [expireDate, setExpireDate] = useState<string | null>(null);
   const [daysLeft, setDaysLeft] = useState(0);
   const [loadingExpiry, setLoadingExpiry] = useState(true);
 
@@ -34,30 +34,25 @@ export default function DashboardPage() {
     if (!userId) return;
     setLoadingExpiry(true);
     
-    // Önce varolan süreyi kontrol et
-    let expiry = await FirebaseService.getUserExpiry(userId);
+    const userData = await FirebaseService.getUserData(userId);
     
-    // Süre yoksa otomatik oluştur (ilk giriş)
-    if (!expiry) {
+    if (userData && userData.expireDate) {
+      setExpireDate(userData.expireDate);
+      const expire = new Date(userData.expireDate).getTime();
       const now = Date.now();
-      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-      await FirebaseService.setUserExpiry(userId, now, now + thirtyDays);
-      expiry = { startDate: now, expiryDate: now + thirtyDays };
+      const remaining = Math.ceil((expire - now) / (1000 * 60 * 60 * 24));
+      setDaysLeft(remaining > 0 ? remaining : 0);
     }
     
-    setUserExpiry(expiry);
-    const now = Date.now();
-    const remaining = Math.ceil((expiry.expiryDate - now) / (1000 * 60 * 60 * 24));
-    setDaysLeft(remaining > 0 ? remaining : 0);
     setLoadingExpiry(false);
   };
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString('tr-TR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString('tr-TR', {
+        day: 'numeric', month: 'long', year: 'numeric',
+      });
+    } catch { return dateStr; }
   };
 
   const stats = [
@@ -71,75 +66,41 @@ export default function DashboardPage() {
       <div className="p-4 lg:p-8">
         <h1 className="text-2xl font-bold mb-6 text-white">Dashboard</h1>
 
-        {/* Süre Bilgisi Kartı */}
-        {!loadingExpiry && userExpiry && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+        {!loadingExpiry && expireDate && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
             className="mb-6 p-5 rounded-xl border border-gray-700 bg-[#1a1a1a]"
-            style={{
-              borderLeftWidth: '4px',
-              borderLeftColor: daysLeft <= 3 ? '#ef4444' : daysLeft <= 7 ? '#eab308' : '#22c55e',
-            }}
-          >
+            style={{ borderLeftWidth: '4px', borderLeftColor: daysLeft <= 3 ? '#ef4444' : daysLeft <= 7 ? '#eab308' : '#22c55e' }}>
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{
-                    backgroundColor: daysLeft <= 3 ? 'rgba(239,68,68,0.1)' : daysLeft <= 7 ? 'rgba(234,179,8,0.1)' : 'rgba(34,197,94,0.1)',
-                  }}
-                >
-                  {daysLeft <= 3 ? (
-                    <FiAlertCircle className="w-6 h-6 text-red-400" />
-                  ) : (
-                    <FiCalendar className="w-6 h-6 text-blue-400" />
-                  )}
+                  style={{ backgroundColor: daysLeft <= 3 ? 'rgba(239,68,68,0.1)' : daysLeft <= 7 ? 'rgba(234,179,8,0.1)' : 'rgba(34,197,94,0.1)' }}>
+                  {daysLeft <= 3 ? <FiAlertCircle className="w-6 h-6 text-red-400" /> : <FiCalendar className="w-6 h-6 text-blue-400" />}
                 </div>
                 <div>
                   <p className="text-sm text-gray-400">Kalan Süre</p>
-                  <p className="text-2xl font-bold"
-                    style={{
-                      color: daysLeft <= 3 ? '#f87171' : daysLeft <= 7 ? '#facc15' : '#4ade80',
-                    }}
-                  >
+                  <p className="text-2xl font-bold" style={{ color: daysLeft <= 3 ? '#f87171' : daysLeft <= 7 ? '#facc15' : '#4ade80' }}>
                     {daysLeft} gün
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">Başlangıç</p>
-                <p className="text-xs text-gray-300">{formatDate(userExpiry.startDate)}</p>
-                <p className="text-xs text-gray-500 mt-1">Bitiş</p>
-                <p className="text-xs text-gray-300">{formatDate(userExpiry.expiryDate)}</p>
+                <p className="text-xs text-gray-500">Bitiş Tarihi</p>
+                <p className="text-xs text-gray-300">{formatDate(expireDate)}</p>
               </div>
             </div>
-
-            {/* İlerleme çubuğu */}
             <div className="mt-3 h-2 bg-gray-700 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ 
-                  width: `${Math.max(0, Math.min(100, ((Date.now() - userExpiry.startDate) / (userExpiry.expiryDate - userExpiry.startDate)) * 100))}%` 
-                }}
+              <motion.div initial={{ width: 0 }}
+                animate={{ width: `${daysLeft > 0 ? Math.min(100, ((30 - daysLeft) / 30) * 100) : 100}%` }}
                 className="h-full rounded-full"
-                style={{
-                  backgroundColor: daysLeft <= 3 ? '#ef4444' : daysLeft <= 7 ? '#eab308' : '#22c55e',
-                }}
-              />
+                style={{ backgroundColor: daysLeft <= 3 ? '#ef4444' : daysLeft <= 7 ? '#eab308' : '#22c55e' }} />
             </div>
           </motion.div>
         )}
 
-        {/* İstatistik Kartları */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {stats.map((stat, index) => (
-            <motion.div
-              key={stat.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="p-6 rounded-xl border border-gray-700 bg-[#1a1a1a]"
-            >
+            <motion.div key={stat.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }}
+              className="p-6 rounded-xl border border-gray-700 bg-[#1a1a1a]">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">{stat.label}</p>
@@ -155,10 +116,7 @@ export default function DashboardPage() {
 
         <div className="p-6 rounded-xl border border-gray-700 bg-[#1a1a1a]">
           <h2 className="text-lg font-semibold mb-2 text-white">Hoş Geldiniz</h2>
-          <p className="text-gray-400 text-sm">
-            Mutlu Player ile en iyi IPTV deneyimini yaşayın.
-            Kanal listesini görüntülemek için menüden Canlı TV'yi seçin.
-          </p>
+          <p className="text-gray-400 text-sm">Mutlu Player ile en iyi IPTV deneyimini yaşayın. Kanal listesini görüntülemek için menüden Canlı TV'yi seçin.</p>
         </div>
       </div>
     </MainLayout>
