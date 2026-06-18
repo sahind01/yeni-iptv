@@ -72,89 +72,42 @@ export class FirebaseService {
       const snapshot = await get(userRef);
       if (snapshot.exists()) return snapshot.val();
       return null;
-    } catch (error) {
-      return null;
-    }
+    } catch (error) { return null; }
   }
 
   static async updateUserSettings(userId: string, settings: Partial<UserSettings>) {
-    try {
-      await update(ref(db, `users/${userId}/settings`), settings);
-    } catch (error) {
-      throw error;
-    }
+    try { await update(ref(db, `users/${userId}/settings`), settings); } catch (error) { throw error; }
   }
 
-  // ==================== CİHAZ SINIRI ====================
-
-  static async addActiveDevice(userId: string): Promise<string> {
-    const deviceId = `device_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    await set(ref(db, `activeDevices/${userId}/${deviceId}`), {
-      startTime: Date.now(),
-      lastPing: Date.now(),
-    });
-    setTimeout(async () => {
-      try { await remove(ref(db, `activeDevices/${userId}/${deviceId}`)); } catch (e) {}
-    }, 10 * 60 * 1000);
-    return deviceId;
+  static async setUserExpiry(userId: string, startDate: number, expiryDate: number) {
+    try { await update(ref(db, `users/${userId}`), { startDate, expiryDate }); } catch (error) {}
   }
 
-  static async getActiveDeviceCount(userId: string): Promise<number> {
+  static async getUserExpiry(userId: string): Promise<{ startDate: number; expiryDate: number } | null> {
     try {
-      const snap = await get(ref(db, `activeDevices/${userId}`));
-      if (!snap.exists()) return 0;
-      const data = snap.val();
-      const now = Date.now();
-      let activeCount = 0;
-      for (const [key, value] of Object.entries(data) as [string, any][]) {
-        if (now - value.lastPing < 10 * 60 * 1000) {
-          activeCount++;
-        } else {
-          await remove(ref(db, `activeDevices/${userId}/${key}`));
-        }
+      const userRef = ref(db, `users/${userId}`);
+      const snapshot = await get(userRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        if (data.startDate && data.expiryDate) return { startDate: data.startDate, expiryDate: data.expiryDate };
       }
-      return activeCount;
-    } catch (error) {
-      return 0;
-    }
+      return null;
+    } catch (error) { return null; }
   }
-
-  static async pingDevice(userId: string, deviceId: string) {
-    try {
-      await update(ref(db, `activeDevices/${userId}/${deviceId}`), { lastPing: Date.now() });
-    } catch (error) {}
-  }
-
-  static async removeDevice(userId: string, deviceId: string) {
-    try {
-      await remove(ref(db, `activeDevices/${userId}/${deviceId}`));
-    } catch (error) {}
-  }
-
-  // ==================== FAVORİLER ====================
 
   static async addToFavorites(userId: string, channel: Channel) {
     try {
       const channelId = sanitizePath(channel.id);
       await set(ref(db, `favorites/${userId}/${channelId}`), {
         channelId: channel.id,
-        channel: {
-          id: channel.id,
-          name: channel.name,
-          logo: channel.logo,
-          group: channel.group,
-          quality: channel.quality,
-        },
+        channel: { id: channel.id, name: channel.name, logo: channel.logo, group: channel.group, quality: channel.quality },
         addedAt: Date.now(),
       });
     } catch (error) { throw error; }
   }
 
   static async removeFromFavorites(userId: string, channelId: string) {
-    try {
-      const cleanId = sanitizePath(channelId);
-      await remove(ref(db, `favorites/${userId}/${cleanId}`));
-    } catch (error) { throw error; }
+    try { await remove(ref(db, `favorites/${userId}/${sanitizePath(channelId)}`)); } catch (error) { throw error; }
   }
 
   static async getFavorites(userId: string): Promise<Favorite[]> {
@@ -163,14 +116,12 @@ export class FirebaseService {
       if (!snapshot.exists()) return [];
       const data = snapshot.val();
       const favorites: Favorite[] = Object.entries(data).map(([key, value]: [string, any]) => ({
-        id: key, userId: userId, channelId: value.channelId, channel: value.channel, addedAt: value.addedAt,
+        id: key, userId, channelId: value.channelId, channel: value.channel, addedAt: value.addedAt,
       }));
       favorites.sort((a, b) => b.addedAt - a.addedAt);
       return favorites;
     } catch (error) { return []; }
   }
-
-  // ==================== SON İZLENENLER ====================
 
   static async addRecentWatch(userId: string, channel: Channel) {
     try {
@@ -190,7 +141,7 @@ export class FirebaseService {
       if (!snapshot.exists()) return [];
       const data = snapshot.val();
       const recentWatches: RecentWatch[] = Object.entries(data).map(([key, value]: [string, any]) => ({
-        id: key, userId: userId, channel: value.channel, watchedAt: value.watchedAt,
+        id: key, userId, channel: value.channel, watchedAt: value.watchedAt,
       }));
       recentWatches.sort((a, b) => b.watchedAt - a.watchedAt);
       return recentWatches.slice(0, 20);
@@ -205,14 +156,10 @@ export class FirebaseService {
       const entries = Object.entries(data) as [string, { watchedAt: number }][];
       if (entries.length > 20) {
         entries.sort((a, b) => b[1].watchedAt - a[1].watchedAt);
-        for (const [key] of entries.slice(20)) {
-          await remove(ref(db, `recentWatches/${userId}/${key}`));
-        }
+        for (const [key] of entries.slice(20)) await remove(ref(db, `recentWatches/${userId}/${key}`));
       }
     } catch (error) {}
   }
-
-  // ==================== ADULT PIN ====================
 
   static async setAdultPin(userId: string, hashedPin: string) {
     try { await update(ref(db, `users/${userId}`), { adultPin: hashedPin }); } catch (error) { throw error; }
