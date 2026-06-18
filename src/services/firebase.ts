@@ -31,14 +31,11 @@ function sanitizePath(str: string): string {
 
 export class FirebaseService {
 
-  // ==================== KULLANICI GİRİŞ ====================
-
   static async loginUser(site: string, username: string, password: string) {
     try {
       const cleanSite = sanitizePath(site);
       const cleanUsername = sanitizePath(username);
       const userId = `${cleanSite}_${cleanUsername}`;
-
       const userRef = ref(db, `users/${userId}`);
       const snapshot = await get(userRef);
 
@@ -59,16 +56,12 @@ export class FirebaseService {
         });
       } else {
         const userData = snapshot.val();
-        if (userData.password !== password) {
-          throw new Error('Hatalı şifre');
-        }
+        if (userData.password !== password) throw new Error('Hatalı şifre');
         await update(userRef, { lastLogin: Date.now() });
       }
-
       return userId;
     } catch (error: any) {
       if (error.message === 'Hatalı şifre') throw error;
-      console.error('Login error:', error);
       throw new Error('Giriş yapılamadı: ' + error.message);
     }
   }
@@ -80,80 +73,70 @@ export class FirebaseService {
       if (snapshot.exists()) return snapshot.val();
       return null;
     } catch (error) {
-      console.error('Kullanıcı bilgileri alınamadı:', error);
       return null;
     }
   }
 
   static async updateUserSettings(userId: string, settings: Partial<UserSettings>) {
     try {
-      const settingsRef = ref(db, `users/${userId}/settings`);
-      await update(settingsRef, settings);
+      await update(ref(db, `users/${userId}/settings`), settings);
     } catch (error) {
-      console.error('Ayarlar güncellenemedi:', error);
       throw error;
     }
   }
 
-  // ==================== SESSION YÖNETİMİ (MAX 2 KİŞİ) ====================
+  // ==================== CİHAZ SINIRI ====================
 
-  static async startSession(userId: string): Promise<string> {
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    await set(ref(db, `sessions/${userId}/${sessionId}`), {
+  static async addActiveDevice(userId: string): Promise<string> {
+    const deviceId = `device_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    await set(ref(db, `activeDevices/${userId}/${deviceId}`), {
       startTime: Date.now(),
-      lastActive: Date.now(),
+      lastPing: Date.now(),
     });
-    return sessionId;
+    setTimeout(async () => {
+      try { await remove(ref(db, `activeDevices/${userId}/${deviceId}`)); } catch (e) {}
+    }, 10 * 60 * 1000);
+    return deviceId;
   }
 
-  static async updateSession(userId: string, sessionId: string) {
+  static async getActiveDeviceCount(userId: string): Promise<number> {
     try {
-      await update(ref(db, `sessions/${userId}/${sessionId}`), {
-        lastActive: Date.now(),
-      });
-    } catch (error) {
-      console.error('Session güncellenemedi:', error);
-    }
-  }
-
-  static async getActiveSessions(userId: string): Promise<any[]> {
-    try {
-      const snap = await get(ref(db, `sessions/${userId}`));
-      if (!snap.exists()) return [];
+      const snap = await get(ref(db, `activeDevices/${userId}`));
+      if (!snap.exists()) return 0;
       const data = snap.val();
-      // 5 dakikadan eski session'ları temizle
       const now = Date.now();
-      const active: any[] = [];
+      let activeCount = 0;
       for (const [key, value] of Object.entries(data) as [string, any][]) {
-        if (now - value.lastActive < 5 * 60 * 1000) {
-          active.push({ id: key, ...value });
+        if (now - value.lastPing < 10 * 60 * 1000) {
+          activeCount++;
         } else {
-          // Eski session'ı sil
-          await remove(ref(db, `sessions/${userId}/${key}`));
+          await remove(ref(db, `activeDevices/${userId}/${key}`));
         }
       }
-      return active;
+      return activeCount;
     } catch (error) {
-      console.error('Session alınamadı:', error);
-      return [];
+      return 0;
     }
   }
 
-  static async endSession(userId: string, sessionId: string) {
+  static async pingDevice(userId: string, deviceId: string) {
     try {
-      await remove(ref(db, `sessions/${userId}/${sessionId}`));
-    } catch (error) {
-      console.error('Session silinemedi:', error);
-    }
+      await update(ref(db, `activeDevices/${userId}/${deviceId}`), { lastPing: Date.now() });
+    } catch (error) {}
   }
 
-  // ==================== FAVORİ İŞLEMLERİ ====================
+  static async removeDevice(userId: string, deviceId: string) {
+    try {
+      await remove(ref(db, `activeDevices/${userId}/${deviceId}`));
+    } catch (error) {}
+  }
+
+  // ==================== FAVORİLER ====================
 
   static async addToFavorites(userId: string, channel: Channel) {
     try {
       const channelId = sanitizePath(channel.id);
-      const favRef = ref(db, `favorites/${userId}/${channelId}`);
-      await set(favRef, {
+      await set(ref(db, `favorites/${userId}/${channelId}`), {
         channelId: channel.id,
         channel: {
           id: channel.id,
@@ -164,42 +147,27 @@ export class FirebaseService {
         },
         addedAt: Date.now(),
       });
-    } catch (error) {
-      console.error('Favori eklenemedi:', error);
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   static async removeFromFavorites(userId: string, channelId: string) {
     try {
       const cleanId = sanitizePath(channelId);
-      const favRef = ref(db, `favorites/${userId}/${cleanId}`);
-      await remove(favRef);
-    } catch (error) {
-      console.error('Favori silinemedi:', error);
-      throw error;
-    }
+      await remove(ref(db, `favorites/${userId}/${cleanId}`));
+    } catch (error) { throw error; }
   }
 
   static async getFavorites(userId: string): Promise<Favorite[]> {
     try {
-      const favRef = ref(db, `favorites/${userId}`);
-      const snapshot = await get(favRef);
+      const snapshot = await get(ref(db, `favorites/${userId}`));
       if (!snapshot.exists()) return [];
       const data = snapshot.val();
       const favorites: Favorite[] = Object.entries(data).map(([key, value]: [string, any]) => ({
-        id: key,
-        userId: userId,
-        channelId: value.channelId,
-        channel: value.channel,
-        addedAt: value.addedAt,
+        id: key, userId: userId, channelId: value.channelId, channel: value.channel, addedAt: value.addedAt,
       }));
       favorites.sort((a, b) => b.addedAt - a.addedAt);
       return favorites;
-    } catch (error) {
-      console.error('Favoriler alınamadı:', error);
-      return [];
-    }
+    } catch (error) { return []; }
   }
 
   // ==================== SON İZLENENLER ====================
@@ -207,84 +175,55 @@ export class FirebaseService {
   static async addRecentWatch(userId: string, channel: Channel) {
     try {
       const channelId = sanitizePath(channel.id);
-      const recentRef = ref(db, `recentWatches/${userId}/${channelId}`);
-      await set(recentRef, {
+      await set(ref(db, `recentWatches/${userId}/${channelId}`), {
         channelId: channel.id,
-        channel: {
-          id: channel.id,
-          name: channel.name,
-          logo: channel.logo,
-          group: channel.group,
-          quality: channel.quality,
-        },
+        channel: { id: channel.id, name: channel.name, logo: channel.logo, group: channel.group, quality: channel.quality },
         watchedAt: Date.now(),
       });
       await this.cleanupRecentWatches(userId);
-    } catch (error) {
-      console.error('Son izlenen eklenemedi:', error);
-    }
+    } catch (error) {}
   }
 
   static async getRecentWatches(userId: string): Promise<RecentWatch[]> {
     try {
-      const recentRef = ref(db, `recentWatches/${userId}`);
-      const snapshot = await get(recentRef);
+      const snapshot = await get(ref(db, `recentWatches/${userId}`));
       if (!snapshot.exists()) return [];
       const data = snapshot.val();
       const recentWatches: RecentWatch[] = Object.entries(data).map(([key, value]: [string, any]) => ({
-        id: key,
-        userId: userId,
-        channel: value.channel,
-        watchedAt: value.watchedAt,
+        id: key, userId: userId, channel: value.channel, watchedAt: value.watchedAt,
       }));
       recentWatches.sort((a, b) => b.watchedAt - a.watchedAt);
       return recentWatches.slice(0, 20);
-    } catch (error) {
-      console.error('Son izlenenler alınamadı:', error);
-      return [];
-    }
+    } catch (error) { return []; }
   }
 
   private static async cleanupRecentWatches(userId: string) {
     try {
-      const recentRef = ref(db, `recentWatches/${userId}`);
-      const snapshot = await get(recentRef);
+      const snapshot = await get(ref(db, `recentWatches/${userId}`));
       if (!snapshot.exists()) return;
       const data = snapshot.val();
       const entries = Object.entries(data) as [string, { watchedAt: number }][];
       if (entries.length > 20) {
         entries.sort((a, b) => b[1].watchedAt - a[1].watchedAt);
-        const toDelete = entries.slice(20);
-        for (const [key] of toDelete) {
+        for (const [key] of entries.slice(20)) {
           await remove(ref(db, `recentWatches/${userId}/${key}`));
         }
       }
-    } catch (error) {
-      console.error('Temizleme hatası:', error);
-    }
+    } catch (error) {}
   }
 
   // ==================== ADULT PIN ====================
 
   static async setAdultPin(userId: string, hashedPin: string) {
-    try {
-      await update(ref(db, `users/${userId}`), { adultPin: hashedPin });
-    } catch (error) {
-      console.error('PIN ayarlanamadı:', error);
-      throw error;
-    }
+    try { await update(ref(db, `users/${userId}`), { adultPin: hashedPin }); } catch (error) { throw error; }
   }
 
   static async getAdultPin(userId: string): Promise<string | null> {
     try {
-      const userRef = ref(db, `users/${userId}/adultPin`);
-      const snapshot = await get(userRef);
+      const snapshot = await get(ref(db, `users/${userId}/adultPin`));
       if (snapshot.exists()) return snapshot.val();
       return null;
-    } catch (error) {
-      console.error('PIN alınamadı:', error);
-      return null;
-    }
+    } catch (error) { return null; }
   }
 }
 
