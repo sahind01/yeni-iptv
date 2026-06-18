@@ -10,7 +10,7 @@ export default function GizlilikPage() {
             <FiLock className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold">Gizlilik Politikası</h1>
-          <p className="text-gray-400 mt-1">Son güncelleme: 2024</p>
+          <p className="text-gray-400 mt-1">Son güncelleme:15 HAZİRAN 2026 </p>
         </div>
 
         <div className="space-y-4">
@@ -20,7 +20,7 @@ export default function GizlilikPage() {
               <div>
                 <h3 className="font-medium text-sm mb-2">Toplanan Veriler</h3>
                 <p className="text-gray-400 text-xs leading-relaxed">
-                  Kullanıcı adı, site bilgisi ve favori kanallarınız Firebase veritabanında saklanır. 
+                  Kullanıcı adı, site bilgisi ve favori kanallarınız Sunucu veritabanında saklanır. 
                   Yayın URL'leri kesinlikle kaydedilmez. Şifreniz hash'lenerek korunur.
                 </p>
               </div>
@@ -33,7 +33,7 @@ export default function GizlilikPage() {
               <div>
                 <h3 className="font-medium text-sm mb-2">Veri Güvenliği</h3>
                 <p className="text-gray-400 text-xs leading-relaxed">
-                  Tüm verileriniz Firebase güvenliği altında korunur. 
+                  Tüm verileriniz Mutlu Medya güvenliği altında korunur. 
                   Üçüncü şahıslarla hiçbir veriniz paylaşılmaz. 
                   Yayın akışları şifreli bağlantı üzerinden iletilir.
                 </p>
@@ -70,7 +70,7 @@ export default function GizlilikPage() {
 
         <div className="text-center mt-8">
           <p className="text-gray-500 text-xs">
-            Sorularınız için: <a href="https://t.me/mutflixadmin" target="_blank" className="text-blue-400 hover:underline">@mutluadmin</a>
+            Sorularınız için: <a href="https://t.me/mutflixadmin" target="_blank" className="text-blue-400 hover:underline">mutlu admin</a>
           </p>
         </div>
       </div>
