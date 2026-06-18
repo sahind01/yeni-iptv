@@ -57,6 +57,14 @@ export default function LoginPage() {
 
       await FirebaseService.loginUser(site, username, password);
 
+      // İlk girişse 30 günlük süre tanımla
+      const userData = await FirebaseService.getUserData(userId);
+      if (!userData?.startDate) {
+        const now = Date.now();
+        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+        await FirebaseService.setUserExpiry(userId, now, now + thirtyDays);
+      }
+
       storeLogin(userId, username, site, password);
       setChannels(channels);
       setAuthReady(true);
