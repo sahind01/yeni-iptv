@@ -49,9 +49,9 @@ export default function LoginPage() {
         return (Date.now() - s.lastActive) < 5 * 60 * 1000;
       });
 
-      if (otherActiveUsers.length >= 2) {
+      if (otherActiveUsers.length >= 1) {
         // 3. kişi - yönlendir
-        window.location.href = 'https://satinaliptv.vercel.app';
+        window.location.href = 'https://mutlu-iptv.vercel.app';
         return;
       }
 
