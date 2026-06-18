@@ -16,57 +16,40 @@ export default function DashboardPage() {
     if (userId) {
       loadStats();
     }
+
+    const deviceId = localStorage.getItem('mutlu_device_id');
+    const uid = localStorage.getItem('mutlu_user_id');
+
+    const pingInterval = setInterval(() => {
+      if (deviceId && uid) {
+        FirebaseService.pingDevice(uid, deviceId);
+      }
+    }, 2 * 60 * 1000);
+
+    return () => clearInterval(pingInterval);
   }, [userId]);
 
   const loadStats = async () => {
     if (!userId) return;
-    
     const favorites = await FirebaseService.getFavorites(userId);
     const recents = await FirebaseService.getRecentWatches(userId);
-    
     setFavoriteCount(favorites.length);
     setRecentCount(recents.length);
   };
 
   const stats = [
-    {
-      id: 'channels',
-      label: 'Toplam Kanal',
-      value: channels.length,
-      icon: FiTv,
-      color: 'from-blue-500 to-blue-600',
-    },
-    {
-      id: 'favorites',
-      label: 'Favoriler',
-      value: favoriteCount,
-      icon: FiHeart,
-      color: 'from-red-500 to-pink-600',
-    },
-    {
-      id: 'recent',
-      label: 'Son İzlenenler',
-      value: recentCount,
-      icon: FiClock,
-      color: 'from-green-500 to-emerald-600',
-    },
+    { id: 'channels', label: 'Toplam Kanal', value: channels.length, icon: FiTv, color: 'from-blue-500 to-blue-600' },
+    { id: 'favorites', label: 'Favoriler', value: favoriteCount, icon: FiHeart, color: 'from-red-500 to-pink-600' },
+    { id: 'recent', label: 'Son İzlenenler', value: recentCount, icon: FiClock, color: 'from-green-500 to-emerald-600' },
   ];
 
   return (
     <MainLayout>
       <div className="p-4 lg:p-8">
         <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-        
-        {/* İstatistik Kartları */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {stats.map((stat, index) => (
-            <motion.div
-              key={stat.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="glass-card p-6"
-            >
+            <motion.div key={stat.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="glass-card p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">{stat.label}</p>
@@ -79,16 +62,9 @@ export default function DashboardPage() {
             </motion.div>
           ))}
         </div>
-
-        {/* Hoş Geldin Mesajı */}
         <div className="glass-card p-6">
-          <h2 className="text-lg font-semibold mb-2">
-            Hoş Geldiniz, {useStore.getState().username}
-          </h2>
-          <p className="text-gray-400">
-            Mutlu Player ile en iyi IPTV deneyimini yaşayın.
-            Kanal listesini görüntülemek için menüden Canlı TV'yi seçin.
-          </p>
+          <h2 className="text-lg font-semibold mb-2">Hoş Geldiniz</h2>
+          <p className="text-gray-400 text-sm">Mutlu Player ile en iyi IPTV deneyimini yaşayın. Kanal listesini görüntülemek için menüden Canlı TV'yi seçin.</p>
         </div>
       </div>
     </MainLayout>
