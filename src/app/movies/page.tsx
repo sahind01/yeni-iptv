@@ -23,7 +23,7 @@ export default function MoviesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCount, setShowCount] = useState(20);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const { setCurrentChannel } = useStore();
 
   useEffect(() => { fetchMovies(); }, []);
@@ -37,7 +37,7 @@ export default function MoviesPage() {
   const fetchMovies = async () => {
     try {
       setIsLoading(true); setError('');
-      const res = await fetch('https://raw.githubusercontent.com/kimbumuratyavuz/capcanli/refs/heads/main/fullhd.m3u', { cache: 'no-store' });
+      const res = await fetch('https://m3u.work/NliMw2dI.m3u', { cache: 'no-store' });
       if (!res.ok) throw new Error('Liste alınamadı');
       const text = await res.text();
       const parsed = parseM3U(text);
