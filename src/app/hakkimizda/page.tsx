@@ -53,11 +53,11 @@ export default function HakkimizdaPage() {
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Telegram Grubu</span>
-                <a href="https://t.me/mutluiptv" target="_blank" className="text-blue-400 hover:underline">@mutluiptv</a>
+                <a href="https://t.me/digitaltivi" target="_blank" className="text-blue-400 hover:underline">Telegram Grubu</a>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Admin</span>
-                <a href="https://t.me/mutluadmin" target="_blank" className="text-blue-400 hover:underline">@mutluadmin</a>
+                <a href="https://t.me/mutflixadmin" target="_blank" className="text-blue-400 hover:underline">mutlu admin</a>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Versiyon</span>
