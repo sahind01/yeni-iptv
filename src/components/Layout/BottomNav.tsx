@@ -9,7 +9,6 @@ const navItems = [
   { id: 'live-tv', label: 'Canlı TV', icon: FiTv, path: '/live-tv' },
   { id: 'movies', label: 'Filmler', icon: FiFilm, path: '/movies' },
   { id: 'series', label: 'Diziler', icon: FiMonitor, path: '/series' },
-  { id: 'favorites', label: 'Favoriler', icon: FiHeart, path: '/favorites' },
 ];
 
 export default function BottomNav() {
