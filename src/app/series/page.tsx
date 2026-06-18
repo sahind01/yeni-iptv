@@ -1,22 +1,22 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
 import VideoPlayer from '@/components/Player/VideoPlayer';
 import { useStore } from '@/store/useStore';
 import { FiMonitor, FiSearch, FiX, FiPlay, FiChevronRight, FiChevronLeft } from 'react-icons/fi';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 interface Episode {
   id: string;
   name: string;
   url: string;
+  tvgName: string;
 }
 
 interface SeriesGroup {
   name: string;
   episodes: Episode[];
-  group: string;
 }
 
 export default function SeriesPage() {
@@ -42,73 +42,67 @@ export default function SeriesPage() {
       const res = await fetch('https://m3u.ch/pl/03664cc59ee4eac89483715db404d9f0_0d5bec11282cce0532a95a62a4bb056f.m3u', { cache: 'no-store' });
       if (!res.ok) throw new Error('Liste alınamadı');
       const text = await res.text();
-      const parsed = parseM3U(text);
-      const grouped = groupSeries(parsed);
-      setSeriesGroups(grouped); setFilteredGroups(grouped);
+      const parsed = parseAndGroupM3U(text);
+      setSeriesGroups(parsed); setFilteredGroups(parsed);
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }
   };
 
-  const parseM3U = (content: string): { name: string; url: string; group: string }[] => {
-    const result: { name: string; url: string; group: string }[] = [];
+  const parseAndGroupM3U = (content: string): SeriesGroup[] => {
+    const groups: Map<string, Episode[]> = new Map();
     const lines = content.split('\n');
-    let cur: any = null;
+    let curGroup = '';
+    let curName = '';
+    let curTvgName = '';
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
+
       if (line.startsWith('#EXTINF:')) {
-        const group = line.match(/group-title="([^"]*)"/)?.[1] || 'Diziler';
-        const name = line.split(',').pop()?.trim() || `Dizi ${i}`;
-        cur = { name, group, url: '' };
-      } else if (line && (line.startsWith('http://') || line.startsWith('https://')) && cur) {
-        cur.url = line;
-        result.push({ ...cur });
-        cur = null;
+        const groupMatch = line.match(/group-title="([^"]*)"/);
+        curGroup = groupMatch ? groupMatch[1].trim() : 'Diğer Diziler';
+        
+        const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
+        curTvgName = tvgNameMatch ? tvgNameMatch[1].trim() : '';
+        
+        const nameParts = line.split(',');
+        curName = nameParts.length > 1 ? nameParts[nameParts.length - 1].trim() : curTvgName || 'Bilinmeyen';
+      } else if (line && (line.startsWith('http://') || line.startsWith('https://')) && curGroup) {
+        if (!groups.has(curGroup)) {
+          groups.set(curGroup, []);
+        }
+        groups.get(curGroup)!.push({
+          id: `ep_${Math.random().toString(36).slice(2, 8)}`,
+          name: curName,
+          url: line,
+          tvgName: curTvgName,
+        });
+        curGroup = '';
+        curName = '';
+        curTvgName = '';
       }
     }
-    return result;
-  };
 
-  const groupSeries = (items: { name: string; url: string; group: string }[]): SeriesGroup[] => {
-    const groups: Map<string, Episode[]> = new Map();
-    const groupCategories: Map<string, string> = new Map();
+    // Sadece 2'den fazla bölümü olanları dizi say, diğerlerini "Diğer"e at
+    const result: SeriesGroup[] = [];
+    const misc: Episode[] = [];
 
-    items.forEach(item => {
-      // "Dizi Adı S01E01" veya "Dizi Adı 1. Bölüm" formatını yakala
-      let baseName = item.name
-        .replace(/\s*S\d+E\d+\s*/gi, '')  // S01E01
-        .replace(/\s*\d+\.\s*Bölüm\s*/gi, '') // 1. Bölüm
-        .replace(/\s*Bölüm\s*\d+\s*/gi, '')   // Bölüm 1
-        .replace(/\s*Sezon\s*\d+\s*/gi, '')   // Sezon 1
-        .replace(/\s*-\s*\d+\s*$/, '')        // sondaki - 1
-        .replace(/\s*\(\d+\)\s*$/, '')        // sondaki (1)
-        .trim();
-
-      // Çok kısaldıysa orijinal ismi kullan
-      if (baseName.length < 3) baseName = item.name;
-
-      if (!groups.has(baseName)) {
-        groups.set(baseName, []);
-        groupCategories.set(baseName, item.group);
+    groups.forEach((episodes, name) => {
+      if (episodes.length >= 2) {
+        result.push({ name, episodes });
+      } else {
+        misc.push(...episodes);
       }
-      groups.get(baseName)!.push({
-        id: `ep_${Math.random().toString(36).slice(2)}`,
-        name: item.name,
-        url: item.url,
-      });
     });
 
-    return Array.from(groups.entries())
-      .map(([name, episodes]) => ({
-        name,
-        episodes: episodes.sort((a, b) => a.name.localeCompare(b.name)),
-        group: groupCategories.get(name) || 'Diziler',
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    if (misc.length > 0) {
+      result.push({ name: 'Diğer Diziler', episodes: misc });
+    }
+
+    return result.sort((a, b) => a.name.localeCompare(b.name));
   };
 
-  const handleSeriesClick = (series: SeriesGroup) => {
-    setSelectedSeries(series);
-  };
+  const handleSeriesClick = (series: SeriesGroup) => setSelectedSeries(series);
 
   const handleEpisodeSelect = (episode: Episode) => {
     setCurrentChannel({
@@ -116,16 +110,15 @@ export default function SeriesPage() {
       name: episode.name,
       logo: '',
       url: episode.url,
-      group: selectedSeries?.group || 'Diziler',
+      group: selectedSeries?.name || 'Diziler',
       quality: 'HD',
     });
     setSelectedEpisode(episode);
   };
 
   const handleBackFromPlayer = () => { setSelectedEpisode(null); setCurrentChannel(null); };
-  const handleBackToSeries = () => { setSelectedSeries(null); };
+  const handleBackToSeries = () => setSelectedSeries(null);
 
-  // PLAYER
   if (selectedEpisode) {
     return (
       <MainLayout>
@@ -140,7 +133,6 @@ export default function SeriesPage() {
     );
   }
 
-  // BÖLÜM LİSTESİ
   if (selectedSeries) {
     return (
       <MainLayout>
@@ -170,6 +162,7 @@ export default function SeriesPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-medium text-white truncate">{ep.name}</h3>
+                  {ep.tvgName && <p className="text-[10px] text-gray-500 truncate">{ep.tvgName}</p>}
                 </div>
                 <button className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
                   <FiPlay className="w-4 h-4" />
@@ -182,7 +175,6 @@ export default function SeriesPage() {
     );
   }
 
-  // DİZİ LİSTESİ
   return (
     <MainLayout>
       <div className="p-3 sm:p-4 lg:p-6">
@@ -219,9 +211,9 @@ export default function SeriesPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-medium text-white truncate">{series.name}</h3>
-                  <p className="text-xs text-gray-500">{series.episodes.length} bölüm • {series.group}</p>
+                  <p className="text-xs text-gray-500">{series.episodes.length} bölüm</p>
                 </div>
-                <span className="px-1.5 py-0.5 bg-purple-500/80 rounded text-[9px] font-bold text-white flex-shrink-0">{series.episodes.length}</span>
+                <span className="px-2 py-0.5 bg-purple-500/80 rounded text-[10px] font-bold text-white flex-shrink-0">{series.episodes.length}</span>
                 <FiChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
               </motion.div>
             ))}
