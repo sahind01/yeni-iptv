@@ -31,32 +31,6 @@ function sanitizePath(str: string): string {
 
 export class FirebaseService {
 
-  static async loginUser(site: string, username: string, password: string) {
-    try {
-      const cleanSite = sanitizePath(site);
-      const cleanUsername = sanitizePath(username);
-      const userId = `${cleanSite}_${cleanUsername}`;
-      const userRef = ref(db, `users/${userId}`);
-      const snapshot = await get(userRef);
-      if (!snapshot.exists()) {
-        await set(userRef, {
-          username, site, password,
-          createdAt: Date.now(),
-          lastLogin: Date.now(),
-          settings: { theme: 'dark', autoPlay: true, preferredQuality: 'auto', language: 'tr', bufferSize: 30 }
-        });
-      } else {
-        const userData = snapshot.val();
-        if (userData.password !== password) throw new Error('Hatalı şifre');
-        await update(userRef, { lastLogin: Date.now() });
-      }
-      return userId;
-    } catch (error: any) {
-      if (error.message === 'Hatalı şifre') throw error;
-      throw new Error('Giriş yapılamadı: ' + error.message);
-    }
-  }
-
   static async getUserData(userId: string) {
     try {
       const snapshot = await get(ref(db, `users/${userId}`));
@@ -66,26 +40,13 @@ export class FirebaseService {
   }
 
   static async updateLastLogin(userId: string) {
-    try { await update(ref(db, `users/${userId}`), { lastLogin: Date.now() }); } catch (error) {}
+    try { 
+      await update(ref(db, `users/${userId}`), { lastAccess: new Date().toISOString() }); 
+    } catch (error) {}
   }
 
   static async updateUserSettings(userId: string, settings: Partial<UserSettings>) {
     try { await update(ref(db, `users/${userId}/settings`), settings); } catch (error) { throw error; }
-  }
-
-  static async setUserExpiry(userId: string, startDate: number, expiryDate: number) {
-    try { await update(ref(db, `users/${userId}`), { startDate, expiryDate }); } catch (error) {}
-  }
-
-  static async getUserExpiry(userId: string): Promise<{ startDate: number; expiryDate: number } | null> {
-    try {
-      const snapshot = await get(ref(db, `users/${userId}`));
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        if (data.startDate && data.expiryDate) return { startDate: data.startDate, expiryDate: data.expiryDate };
-      }
-      return null;
-    } catch (error) { return null; }
   }
 
   static async addToFavorites(userId: string, channel: Channel) {
