@@ -25,14 +25,12 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     isLive: true,
   });
 
-  // Reklam scriptini yükle
   useEffect(() => {
     if (adRef.current) {
+      adRef.current.innerHTML = '';
       const script = document.createElement('script');
       script.src = 'https://www.highperformanceformat.com/17d00916f28f83916acf6ce35dca6c88/invoke.js';
       script.async = true;
-      
-      // atOptions
       (window as any).atOptions = {
         'key': '17d00916f28f83916acf6ce35dca6c88',
         'format': 'iframe',
@@ -40,23 +38,14 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         'width': 320,
         'params': {}
       };
-      
       adRef.current.appendChild(script);
-
-      return () => {
-        if (adRef.current) {
-          adRef.current.innerHTML = '';
-        }
-      };
     }
   }, [currentChannel?.url]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
-
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
-
     const url = currentChannel.url;
     const isLiveStream = url.includes('.m3u8') && (url.includes('live') || url.includes('stream') || url.includes('tv') || url.includes('channel'));
     setPlayerState(prev => ({ ...prev, isLive: isLiveStream }));
@@ -70,19 +59,12 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         video.play().catch(() => {});
         setPlayerState(prev => ({ ...prev, error: null }));
       });
-      hls.on(Hls.Events.ERROR, () => {
-        video.src = url;
-        video.load();
-        video.play().catch(() => {});
-      });
+      hls.on(Hls.Events.ERROR, () => { video.src = url; video.load(); video.play().catch(() => {}); });
     } else {
       video.src = url;
       video.load();
-      video.play().catch(() => {
-        setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' }));
-      });
+      video.play().catch(() => { setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' })); });
     }
-
     return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
   }, [currentChannel?.url]);
 
@@ -96,7 +78,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const onVolume = () => setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
     const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
     const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
-
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('timeupdate', onTimeUpdate);
@@ -104,7 +85,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     video.addEventListener('volumechange', onVolume);
     video.addEventListener('error', onError);
     video.addEventListener('canplay', onCanPlay);
-
     return () => {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
@@ -119,9 +99,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const resetControlsTimer = () => {
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
     setPlayerState(prev => ({ ...prev, showControls: true }));
-    controlsTimer.current = setTimeout(() => {
-      setPlayerState(prev => ({ ...prev, showControls: false }));
-    }, 5000);
+    controlsTimer.current = setTimeout(() => { setPlayerState(prev => ({ ...prev, showControls: false })); }, 5000);
   };
 
   useEffect(() => {
@@ -153,17 +131,12 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   };
 
   const skipTime = (seconds: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + seconds));
-      resetControlsTimer();
-    }
+    if (videoRef.current) { videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + seconds)); resetControlsTimer(); }
   };
 
   const formatTime = (t: number) => {
     if (!isFinite(t) || t < 0) return '0:00';
-    const h = Math.floor(t / 3600);
-    const m = Math.floor((t % 3600) / 60);
-    const s = Math.floor(t % 60);
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
     if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
@@ -171,108 +144,78 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const progress = playerState.duration > 0 ? (playerState.currentTime / playerState.duration) * 100 : 0;
 
   if (!currentChannel) {
-    return (
-      <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl">
-        <p className="text-gray-500">Kanal seçilmedi</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
   }
 
   return (
     <div className="space-y-2">
-      {/* Player */}
-      <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl group" style={{ aspectRatio: '16/9' }}>
+      <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
         <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay />
 
-        {/* HATA */}
         {playerState.error && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
             <div className="text-center">
               <p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
-              <button onClick={() => { if (videoRef.current) { videoRef.current.load(); videoRef.current.play().catch(() => {}); } }}
-                className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm">Tekrar Dene</button>
+              <button onClick={() => { if (videoRef.current) { videoRef.current.load(); videoRef.current.play().catch(() => {}); } }} className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm">Tekrar Dene</button>
             </div>
           </div>
         )}
 
-        {/* GERİ TUŞU */}
         {onBack && (
           <div className="absolute top-3 left-3 z-30">
             <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button>
           </div>
         )}
 
-        {/* KANAL ADI */}
         {playerState.showControls && (
           <div className="absolute top-3 right-3 z-20">
             <p className="text-xs bg-black/50 backdrop-blur px-3 py-1.5 rounded-lg text-white/80">{currentChannel.name}</p>
           </div>
         )}
 
-        {/* ALT KONTROLLER */}
-        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pt-10 sm:pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           {!playerState.isLive && (
-            <div className="mb-3">
-              <div className="relative h-2 bg-gray-600/50 rounded-full cursor-pointer group" onClick={handleSeek}>
+            <div className="mb-2 sm:mb-3">
+              <div className="relative h-1.5 sm:h-2 bg-gray-600/50 rounded-full cursor-pointer" onClick={handleSeek}>
                 <div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }} />
-                <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" style={{ left: `${progress}%`, marginLeft: -8 }} />
+                <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" style={{ left: `${progress}%`, marginLeft: -6 }} />
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-[10px] text-gray-400">{formatTime(playerState.currentTime)}</span>
-                <span className="text-[10px] text-gray-400">{formatTime(playerState.duration)}</span>
+                <span className="text-[9px] sm:text-[10px] text-gray-400">{formatTime(playerState.currentTime)}</span>
+                <span className="text-[9px] sm:text-[10px] text-gray-400">{formatTime(playerState.duration)}</span>
               </div>
             </div>
           )}
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              {!playerState.isLive && (
-                <button onClick={() => skipTime(-10)} className="p-2 hover:bg-white/10 rounded-lg text-sm">⏪</button>
-              )}
-              <button onClick={togglePlay} className="p-2 hover:bg-white/10 rounded-lg text-lg">
-                {playerState.isPlaying ? '⏸' : '▶️'}
-              </button>
-              {!playerState.isLive && (
-                <button onClick={() => skipTime(10)} className="p-2 hover:bg-white/10 rounded-lg text-sm">⏩</button>
-              )}
-              <button onClick={toggleMute} className="p-2 hover:bg-white/10 rounded-lg">
-                {playerState.isMuted || playerState.volume === 0 ? '🔇' : '🔊'}
-              </button>
-              <input type="range" min="0" max="1" step="0.1" value={playerState.volume}
-                onChange={(e) => changeVolume(parseFloat(e.target.value))}
-                className="w-16 h-1 accent-blue-500 hidden sm:block" />
+            <div className="flex items-center space-x-1 sm:space-x-2">
+              {!playerState.isLive && <button onClick={() => skipTime(-10)} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-xs sm:text-sm">⏪</button>}
+              <button onClick={togglePlay} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-base sm:text-lg">{playerState.isPlaying ? '⏸' : '▶️'}</button>
+              {!playerState.isLive && <button onClick={() => skipTime(10)} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-xs sm:text-sm">⏩</button>}
+              <button onClick={toggleMute} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg">{playerState.isMuted || playerState.volume === 0 ? '🔇' : '🔊'}</button>
+              <input type="range" min="0" max="1" step="0.1" value={playerState.volume} onChange={(e) => changeVolume(parseFloat(e.target.value))} className="w-12 sm:w-16 h-1 accent-blue-500 hidden sm:block" />
             </div>
-
-            <div className="flex items-center space-x-2">
-              {!playerState.isLive && (
-                <span className="text-xs text-gray-400">{formatTime(playerState.currentTime)} / {formatTime(playerState.duration)}</span>
-              )}
-              <button onClick={toggleFullscreen} className="p-2 hover:bg-white/10 rounded-lg text-lg">⛶</button>
+            <div className="flex items-center space-x-1 sm:space-x-2">
+              {!playerState.isLive && <span className="text-[9px] sm:text-xs text-gray-400">{formatTime(playerState.currentTime)} / {formatTime(playerState.duration)}</span>}
+              <button onClick={toggleFullscreen} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-base sm:text-lg">⛶</button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* REKLAM VE DESTEK BANNER */}
+      {/* REKLAM BANNER */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
-        {/* Destek Mesajı */}
-        <div className="px-4 py-2.5 flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-gray-700/30">
+        <div className="px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-gray-700/30">
           <div className="flex items-center gap-2">
-            <span className="text-lg">🙏</span>
+            <span className="text-base sm:text-lg">🙏</span>
             <div>
-              <p className="text-xs text-white font-medium">Mutlu Player'a destek ol!</p>
-              <p className="text-[10px] text-gray-400">Bizlere destek olmak için aşağıdaki reklama tıklar mısın?</p>
+              <p className="text-[11px] sm:text-xs text-white font-medium">Mutlu Player'a destek ol!</p>
+              <p className="text-[9px] sm:text-[10px] text-gray-400">Aşağıdaki reklama tıklayarak bize destek olabilirsin.</p>
             </div>
           </div>
-          <FiHeart className="w-5 h-5 text-red-400 animate-pulse" />
+          <FiHeart className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 animate-pulse" />
         </div>
-        
-        {/* Reklam Alanı */}
-        <div className="p-3 flex justify-center bg-[#111]" ref={adRef}>
-          <div className="w-[320px] h-[50px] bg-gray-800/50 rounded flex items-center justify-center text-[10px] text-gray-500">
-            Reklam yükleniyor...
-          </div>
-        </div>
+        <div className="p-2 sm:p-3 flex justify-center bg-[#111]" ref={adRef} />
       </div>
     </div>
   );
