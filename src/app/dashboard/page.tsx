@@ -2,19 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FiTv, FiHeart, FiClock, FiPlay, FiFilm, FiMonitor, FiTrendingUp, FiZap, FiStar, FiShield } from 'react-icons/fi';
+import { FiTv, FiHeart, FiClock, FiPlay, FiFilm, FiMonitor, FiTrendingUp, FiZap, FiStar, FiShield, FiMaximize2, FiMinimize2 } from 'react-icons/fi';
 import MainLayout from '@/components/Layout/MainLayout';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import { useRouter } from 'next/navigation';
 import type { RecentWatch } from '@/types';
-
-// Manuel yedek maç listesi
-const fallbackMatches = [
-  { time: '20:00', league: 'Süper Lig', match: 'Galatasaray - Fenerbahçe', channel: 'beIN Sports 1' },
-  { time: '22:00', league: 'Premier Lig', match: 'Arsenal - Chelsea', channel: 'beIN Sports 3' },
-  { time: '19:30', league: 'Bundesliga', match: 'Bayern Münih - Dortmund', channel: 'beIN Sports 4' },
-];
 
 const featuredSeries = [
   { name: 'Kurtlar Vadisi', episode: 'Yeni Bölüm', channel: 'TRT 1', day: 'Perşembe 20:00' },
@@ -31,8 +24,7 @@ export default function DashboardPage() {
   const [recentMovies, setRecentMovies] = useState<RecentWatch[]>([]);
   const [recentSeries, setRecentSeries] = useState<RecentWatch[]>([]);
   const [greeting, setGreeting] = useState('');
-  const [matches, setMatches] = useState(fallbackMatches);
-  const [matchesLoading, setMatchesLoading] = useState(true);
+  const [iframeFull, setIframeFull] = useState(false);
 
   useEffect(() => {
     if (userId) loadAll();
@@ -41,55 +33,7 @@ export default function DashboardPage() {
     else if (hour < 12) setGreeting('Günaydın');
     else if (hour < 18) setGreeting('İyi Günler');
     else setGreeting('İyi Akşamlar');
-    fetchMatches();
   }, [userId]);
-
-  // GitHub'dan günün maçlarını çek
-  const fetchMatches = async () => {
-    try {
-      setMatchesLoading(true);
-      const res = await fetch('https://raw.githubusercontent.com/sahind01/gunun-maci/refs/heads/main/index.html', { cache: 'no-store' });
-      if (!res.ok) throw new Error('Maç verisi alınamadı');
-      const html = await res.text();
-      
-      // HTML'den maç verilerini ayıkla
-      const parsed = parseMatchesFromHTML(html);
-      if (parsed.length > 0) {
-        setMatches(parsed);
-      }
-    } catch (error) {
-      console.log('Maç verisi çekilemedi, yedek liste gösteriliyor');
-    } finally {
-      setMatchesLoading(false);
-    }
-  };
-
-  // HTML'den maç bilgilerini çıkar
-  const parseMatchesFromHTML = (html: string) => {
-    const matches: { time: string; league: string; match: string; channel: string }[] = [];
-    
-    // HTML'deki tüm satırları tara
-    const lines = html.split('\n');
-    
-    for (const line of lines) {
-      // Saat: 20:00, Maç: Takım1 - Takım2, Lig: Süper Lig, Kanal: beIN gibi formatları yakala
-      const timeMatch = line.match(/(\d{2}:\d{2})/);
-      const teamsMatch = line.match(/([A-Za-zğüşıöçĞÜŞİÖÇ\s]+)\s*[-–]\s*([A-Za-zğüşıöçĞÜŞİÖÇ\s]+)/);
-      const leagueMatch = line.match(/(Süper Lig|Premier Lig|Bundesliga|La Liga|Serie A|Ligue 1|Şampiyonlar Ligi|UEFA|TFF\s1\.\sLig|Trendyol)/i);
-      const channelMatch = line.match(/(beIN\s*Sports?\s*\d*|TRT\s*\d*|S Sport|S Sport Plus|Tivibu|D Smart|Exxen)/i);
-      
-      if (timeMatch && teamsMatch) {
-        matches.push({
-          time: timeMatch[1],
-          league: leagueMatch ? leagueMatch[1] : 'Lig',
-          match: `${teamsMatch[1].trim()} - ${teamsMatch[2].trim()}`,
-          channel: channelMatch ? channelMatch[1] : 'beIN Sports',
-        });
-      }
-    }
-    
-    return matches.slice(0, 6); // En fazla 6 maç
-  };
 
   const loadAll = async () => {
     if (!userId) return;
@@ -147,33 +91,30 @@ export default function DashboardPage() {
           <p className="text-gray-400 text-sm mt-1">Bugün ne izlemek istersin?</p>
         </motion.div>
 
-        {/* GÜNÜN MAÇLARI - GITHUB'DAN CANLI */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 rounded-xl border border-gray-700 bg-[#1a1a1a]">
-          <div className="flex items-center justify-between mb-3">
+        {/* GÜNÜN MAÇLARI - IFRAME */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="text-lg">⚽</span>
               <h2 className="text-sm font-semibold text-white">Günün Maçları</h2>
               <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">CANLI</span>
             </div>
-            {matchesLoading && <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />}
+            <button 
+              onClick={() => setIframeFull(!iframeFull)} 
+              className="p-1.5 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+            >
+              {iframeFull ? <FiMinimize2 className="w-4 h-4" /> : <FiMaximize2 className="w-4 h-4" />}
+            </button>
           </div>
-          <div className="space-y-2">
-            {matches.map((match, index) => (
-              <div key={index} className="flex items-center justify-between p-2.5 bg-white/5 rounded-lg hover:bg-white/10 cursor-pointer transition-all"
-                onClick={() => router.push('/live-tv')}>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-white font-bold bg-blue-500/20 px-2 py-1 rounded min-w-[45px] text-center">{match.time}</span>
-                  <div>
-                    <p className="text-xs text-white font-medium">{match.match}</p>
-                    <p className="text-[10px] text-gray-500">{match.league}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-400">{match.channel}</span>
-                  <FiPlay className="w-3 h-3 text-blue-400" />
-                </div>
-              </div>
-            ))}
+          <div className={`rounded-xl border border-gray-700 overflow-hidden bg-[#111] transition-all duration-300 ${iframeFull ? 'h-[500px] sm:h-[600px]' : 'h-[300px] sm:h-[350px]'}`}>
+            <iframe 
+              src="https://mutlugunmaci.vercel.app/" 
+              className="w-full h-full"
+              style={{ border: 'none' }}
+              title="Günün Maçları"
+              sandbox="allow-scripts allow-same-origin"
+              loading="lazy"
+            />
           </div>
         </motion.div>
 
