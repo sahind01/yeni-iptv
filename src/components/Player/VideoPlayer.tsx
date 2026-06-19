@@ -14,7 +14,6 @@ interface Message {
   time: number;
 }
 
-const ADMIN_PIN = '0142';
 const MAX_MESSAGES = 15;
 
 export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
@@ -148,15 +147,12 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
   const saveNick = () => { const n = nick.trim(); if (n.length < 2) return; localStorage.setItem('mutlu_chat_nick', n); setNick(n); setNickSet(true); };
 
-  // Eski mesajları temizle
   const cleanupOldMessages = async (channelId: string) => {
     const chatRef_db = ref(db, `chats/${channelId}`);
     const snapshot = await get(chatRef_db);
     if (!snapshot.exists()) return;
-    
     const data = snapshot.val();
     const entries = Object.entries(data) as [string, { time: number }][];
-    
     if (entries.length > MAX_MESSAGES) {
       entries.sort((a, b) => a[1].time - b[1].time);
       const deleteCount = entries.length - MAX_MESSAGES;
@@ -171,7 +167,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const channelId = currentChannel.id.replace(/[.#$\[\]]/g, '_');
     await push(ref(db, `chats/${channelId}`), { nick, text: chatText.trim().slice(0, 200), time: Date.now() });
     setChatText('');
-    // 15 mesajı aşınca eskileri sil
     await cleanupOldMessages(channelId);
   };
 
@@ -179,12 +174,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     if (!isAdmin || !currentChannel?.id) return;
     const channelId = currentChannel.id.replace(/[.#$\[\]]/g, '_');
     await remove(ref(db, `chats/${channelId}/${msgId}`));
-  };
-
-  const handleAdminLogin = () => {
-    if (adminPin === ADMIN_PIN) {
-      setIsAdmin(true); setShowAdminLogin(false); setAdminPin(''); setAdminPinError('');
-    } else { setAdminPinError('Hatalı PIN!'); setAdminPin(''); }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -290,16 +279,42 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       {showAdminLogin && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}>
           <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-5 w-full max-w-xs" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold flex items-center gap-2"><FiShield className="text-red-400" /> Admin Girişi</h3><button onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}><FiX className="w-4 h-4" /></button></div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2"><FiShield className="text-red-400" /> Admin Girişi</h3>
+              <button onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}><FiX className="w-4 h-4" /></button>
+            </div>
             <div className="flex justify-center space-x-2 mb-3">
-              {[0,1,2,3].map(i => (<div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>{i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}</div>))}
+              {[0,1,2,3].map(i => (
+                <div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>
+                  {i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}
+                </div>
+              ))}
             </div>
             {adminPinError && <p className="text-red-400 text-xs text-center mb-3">{adminPinError}</p>}
             <div className="space-y-2 mb-3">
               {[['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']].map((row, i) => (
                 <div key={i} className="flex justify-center space-x-2">
                   {row.map((num, j) => num ? (
-                    <button key={j} onClick={() => { if (num === '⌫') { setAdminPin(p => p.slice(0, -1)); setAdminPinError(''); } else if (adminPin.length < 4) { const np = adminPin + num; setAdminPin(np); if (np.length === 4) setTimeout(() => handleAdminLogin(), 200); } }} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-base font-semibold">{num === '⌫' ? '✕' : num}</button>
+                    <button key={j} onClick={() => {
+                      if (num === '⌫') { setAdminPin(p => p.slice(0, -1)); setAdminPinError(''); }
+                      else if (adminPin.length < 4) {
+                        const np = adminPin + num;
+                        setAdminPin(np);
+                        setAdminPinError('');
+                        if (np.length === 4) {
+                          if (np === '0142') {
+                            setIsAdmin(true);
+                            setShowAdminLogin(false);
+                            setAdminPin('');
+                          } else {
+                            setAdminPinError('Hatalı PIN!');
+                            setAdminPin('');
+                          }
+                        }
+                      }
+                    }} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-base font-semibold">
+                      {num === '⌫' ? '✕' : num}
+                    </button>
                   ) : <div key={j} className="w-12 h-12" />)}
                 </div>
               ))}
