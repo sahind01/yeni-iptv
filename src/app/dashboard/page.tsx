@@ -9,11 +9,6 @@ import { FirebaseService } from '@/services/firebase';
 import { useRouter } from 'next/navigation';
 import type { RecentWatch } from '@/types';
 
-const featuredSeries = [
-  { name: 'Kurtlar Vadisi', episode: 'Yeni Bölüm', channel: 'TRT 1', day: 'Perşembe 20:00' },
-  { name: 'Teşkilat', episode: 'Son Bölüm', channel: 'TRT 1', day: 'Pazar 20:00' },
-  { name: 'Yalı Çapkını', episode: 'Yeni Sezon', channel: 'Star TV', day: 'Cuma 20:00' },
-];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -74,13 +69,6 @@ export default function DashboardPage() {
     }
   };
 
-  const quickActions = [
-    { label: 'Canlı TV', icon: FiTv, path: '/live-tv', color: 'from-blue-500 to-blue-600' },
-    { label: 'Filmler', icon: FiFilm, path: '/movies', color: 'from-purple-500 to-pink-600' },
-    { label: 'Diziler', icon: FiMonitor, path: '/series', color: 'from-orange-500 to-red-600' },
-    { label: 'Favoriler', icon: FiHeart, path: '/favorites', color: 'from-red-500 to-pink-600' },
-  ];
-
   return (
     <MainLayout>
       <div className="p-4 lg:p-8 max-w-5xl mx-auto">
@@ -117,17 +105,6 @@ export default function DashboardPage() {
             />
           </div>
         </motion.div>
-
-        {/* Hızlı Erişim */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {quickActions.map((action, index) => (
-            <motion.button key={action.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }}
-              onClick={() => router.push(action.path)} className={`p-4 rounded-xl bg-gradient-to-br ${action.color} hover:scale-105 active:scale-95 transition-all`}>
-              <action.icon className="w-6 h-6 mb-2" />
-              <span className="text-sm font-medium">{action.label}</span>
-            </motion.button>
-          ))}
-        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           {/* İstatistikler */}
