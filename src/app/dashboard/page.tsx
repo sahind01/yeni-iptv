@@ -9,6 +9,11 @@ import { FirebaseService } from '@/services/firebase';
 import { useRouter } from 'next/navigation';
 import type { RecentWatch } from '@/types';
 
+const featuredSeries = [
+  { name: 'Kurtlar Vadisi', episode: 'Yeni Bölüm', channel: 'TRT 1', day: 'Perşembe 20:00' },
+  { name: 'Teşkilat', episode: 'Son Bölüm', channel: 'TRT 1', day: 'Pazar 20:00' },
+  { name: 'Yalı Çapkını', episode: 'Yeni Sezon', channel: 'Star TV', day: 'Cuma 20:00' },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
