@@ -9,35 +9,44 @@ export async function GET() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
 
-    // Debug
-    console.log('XML uzunluğu:', xml.length);
-    console.log('İlk 1000 karakter:', xml.substring(0, 1000));
-
-    // TÜM PROGRAMLARI AL - zaman filtresi olmadan
-    const programmes: any[] = [];
-    const pRegex = /<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)"[^>]*>[\s\S]*?<title[^>]*>([^<]*)<\/title>/g;
+    // Kanal isimleri
+    const channels: Record<string, string> = {};
+    const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
     let m;
-    let count = 0;
-
-    while ((m = pRegex.exec(xml)) !== null) {
-      programmes.push({
-        start: m[1],
-        stop: m[2],
-        channel: m[3],
-        title: m[4].trim(),
-      });
-      count++;
-      if (count >= 10) break;
+    while ((m = chRegex.exec(xml)) !== null) {
+      channels[m[1]] = m[2].trim();
     }
 
-    console.log('İlk 10 program:', JSON.stringify(programmes, null, 2));
+    // Şimdiki zamanı XML'deki formatta hazırla: 20260621180900 +0000
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(now.getUTCDate()).padStart(2, '0');
+    const hour = String(now.getUTCHours()).padStart(2, '0');
+    const min = String(now.getUTCMinutes()).padStart(2, '0');
+    const sec = String(now.getUTCSeconds()).padStart(2, '0');
+    const currentTime = `${year}${month}${day}${hour}${min}${sec} +0000`;
+
+    const programmes: any[] = [];
+    const pRegex = /<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)"[^>]*>[\s\S]*?<title[^>]*>([^<]*)<\/title>/g;
+
+    while ((m = pRegex.exec(xml)) !== null) {
+      if (m[1] <= currentTime && m[2] >= currentTime) {
+        programmes.push({
+          channel: channels[m[3]] || m[3],
+          title: m[4].trim(),
+          start: m[1],
+          stop: m[2],
+        });
+      }
+      if (programmes.length > 5000) break;
+    }
 
     return NextResponse.json({
       success: true,
-      xmlLength: xml.length,
-      xmlStart: xml.substring(0, 1000),
-      totalProgrammesFound: count,
-      sampleProgrammes: programmes,
+      currentTime: currentTime,
+      total: programmes.length,
+      onAir: programmes.slice(0, 50),
     });
 
   } catch (e: any) {
