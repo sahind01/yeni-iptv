@@ -28,39 +28,23 @@ export default function InstallPrompt() {
 
     window.addEventListener('beforeinstallprompt', handler);
 
-    // iOS için 3 saniye sonra göster
     if (ios) {
-      setTimeout(() => setShowPrompt(true), 3000);
+      setTimeout(() => setShowPrompt(true), 2000);
     }
-
-    // Android için 5 saniye içinde event gelmezse manuel göster
-    setTimeout(() => {
-      if (!deferredPrompt && !ios) {
-        setShowPrompt(true);
-      }
-    }, 5000);
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstall = async () => {
     if (deferredPrompt) {
-      try {
-        await deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log('Kurulum:', outcome);
-        if (outcome === 'accepted') {
-          setShowPrompt(false);
-        }
-      } catch (e) {
-        console.log('Kurulum hatası:', e);
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShowPrompt(false);
       }
       setDeferredPrompt(null);
     } else if (isIOS) {
       setShowIOSGuide(true);
-    } else {
-      // Manuel tarif
-      alert('Tarayıcı menüsünden (⋮) "Ana Ekrana Ekle" veya "Uygulama Yükle" seçeneğini kullanın.');
     }
   };
 
@@ -70,10 +54,10 @@ export default function InstallPrompt() {
     <AnimatePresence>
       {showPrompt && (
         <motion.div
-          initial={{ opacity: 0, y: -60 }}
+          initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -60 }}
-          className="fixed top-4 right-4 z-[200] w-[calc(100%-32px)] max-w-[360px]"
+          exit={{ opacity: 0, y: -50 }}
+          className="fixed top-4 right-4 z-[200] max-w-sm"
         >
           {showIOSGuide ? (
             <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-4 shadow-2xl">
@@ -86,9 +70,9 @@ export default function InstallPrompt() {
                 </button>
               </div>
               <ol className="text-xs text-gray-300 space-y-2">
-                <li>1. Safari'de paylaş butonuna <span className="text-blue-400">📤</span> tıkla</li>
-                <li>2. "<span className="text-white font-medium">Ana Ekrana Ekle</span>" seç</li>
-                <li>3. "<span className="text-white font-medium">Ekle</span>" ye tıkla</li>
+                <li>1. Safari'de paylaş butonuna 📤 tıkla</li>
+                <li>2. "Ana Ekrana Ekle" seç</li>
+                <li>3. "Ekle" ye tıkla</li>
               </ol>
               <button onClick={() => { setShowPrompt(false); setShowIOSGuide(false); }} className="w-full mt-3 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-xs font-medium">
                 Anladım
@@ -103,17 +87,13 @@ export default function InstallPrompt() {
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-white">Uygulamayı Yükle</h3>
                   <p className="text-xs text-gray-400 mt-1">
-                    {isIOS ? 'Ana ekrana ekleyin' : 'Daha iyi deneyim için ana ekrana ekleyin'}
+                    {isIOS ? 'Ana ekrana ekleyerek kullanın' : 'Hızlı erişim için ana ekrana ekleyin'}
                   </p>
                   <div className="flex items-center space-x-2 mt-3">
-                    <button 
-                      onClick={handleInstall} 
-                      className="flex-1 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
-                    >
-                      <FiDownload className="w-4 h-4" />
-                      <span>{isIOS ? 'Nasıl Yapılır?' : '📱 Yükle'}</span>
+                    <button onClick={handleInstall} className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-xs font-medium transition-all">
+                      {isIOS ? 'Nasıl Yapılır?' : '📱 Yükle'}
                     </button>
-                    <button onClick={() => setShowPrompt(false)} className="px-3 py-2.5 hover:bg-white/5 rounded-lg transition-all">
+                    <button onClick={() => setShowPrompt(false)} className="px-3 py-2 hover:bg-white/5 rounded-lg transition-all">
                       <FiX className="w-4 h-4 text-gray-400" />
                     </button>
                   </div>
