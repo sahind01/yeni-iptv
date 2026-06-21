@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { useStore } from '@/store/useStore';
-import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX } from 'react-icons/fi';
+import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
 import { db } from '@/services/firebase';
 
@@ -39,6 +39,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminPin, setAdminPin] = useState('');
   const [adminPinError, setAdminPinError] = useState('');
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     const savedNick = localStorage.getItem('mutlu_chat_nick');
@@ -180,6 +181,24 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     if (e.key === 'Enter') { if (!nickSet) saveNick(); else sendMessage(); }
   };
 
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: currentChannel?.name || 'Mutlu Player',
+        text: `📺 ${currentChannel?.name} kanalını izliyorum! Sen de katıl! 🎉\n👉 ${window.location.href}`,
+        url: window.location.href,
+      }).catch(() => {
+        navigator.clipboard.writeText(window.location.href);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      });
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }
+  };
+
   const progress = playerState.duration > 0 ? (playerState.currentTime / playerState.duration) * 100 : 0;
 
   if (!currentChannel) {
@@ -197,8 +216,21 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
               <button onClick={() => { if (videoRef.current) { videoRef.current.load(); videoRef.current.play().catch(() => {}); } }} className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm">Tekrar Dene</button></div>
           </div>
         )}
-        {onBack && <div className="absolute top-3 left-3 z-30"><button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button></div>}
-        {playerState.showControls && <div className="absolute top-3 right-3 z-20"><p className="text-xs bg-black/50 backdrop-blur px-3 py-1.5 rounded-lg text-white/80">{currentChannel.name}</p></div>}
+        
+        {/* ÜST BAR: GERİ + PAYLAŞ */}
+        <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
+          {onBack ? (
+            <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button>
+          ) : <div />}
+          <button onClick={(e) => { e.stopPropagation(); handleShare(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70 flex items-center gap-1.5">
+            {shareCopied ? (
+              <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></>
+            ) : (
+              <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>
+            )}
+          </button>
+        </div>
+
         <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pt-10 sm:pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           {!playerState.isLive && (
             <div className="mb-2 sm:mb-3"><div className="relative h-1.5 sm:h-2 bg-gray-600/50 rounded-full cursor-pointer" onClick={handleSeek}><div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }} /></div>
@@ -219,13 +251,19 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* REKLAM */}
-      <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="px-3 py-2 flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-gray-700/30">
-          <div className="flex items-center gap-2"><span>🙏</span><p className="text-[11px] text-white font-medium">Reklama tıklayarak destek ol!</p></div>
-          <FiHeart className="w-4 h-4 text-red-400 animate-pulse" />
+      {/* REKLAM - DAHA ÇEKİCİ */}
+      <div className="bg-gradient-to-r from-yellow-500/5 via-orange-500/5 to-red-500/5 border border-yellow-500/20 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl animate-bounce">🎁</span>
+            <div>
+              <p className="text-xs text-white font-semibold">Bu yayınları ücretsiz izliyorsun!</p>
+              <p className="text-[10px] text-yellow-400/80 mt-0.5">Bize destek olmak için aşağıdaki reklama tıklar mısın? ✨</p>
+            </div>
+          </div>
+          <FiHeart className="w-5 h-5 text-red-400 animate-pulse flex-shrink-0" />
         </div>
-        <div className="p-2 flex justify-center bg-[#111]" ref={adRef} />
+        <div className="px-2 pb-3 flex justify-center" ref={adRef} />
       </div>
 
       {/* SOHBET */}
@@ -279,42 +317,25 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       {showAdminLogin && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}>
           <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-5 w-full max-w-xs" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2"><FiShield className="text-red-400" /> Admin Girişi</h3>
-              <button onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}><FiX className="w-4 h-4" /></button>
-            </div>
+            <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold flex items-center gap-2"><FiShield className="text-red-400" /> Admin Girişi</h3><button onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}><FiX className="w-4 h-4" /></button></div>
             <div className="flex justify-center space-x-2 mb-3">
-              {[0,1,2,3].map(i => (
-                <div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>
-                  {i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}
-                </div>
-              ))}
+              {[0,1,2,3].map(i => (<div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>{i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}</div>))}
             </div>
             {adminPinError && <p className="text-red-400 text-xs text-center mb-3">{adminPinError}</p>}
-            <div className="space-y-2 mb-3">
+            <div className="space-y-2">
               {[['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']].map((row, i) => (
                 <div key={i} className="flex justify-center space-x-2">
                   {row.map((num, j) => num ? (
                     <button key={j} onClick={() => {
                       if (num === '⌫') { setAdminPin(p => p.slice(0, -1)); setAdminPinError(''); }
                       else if (adminPin.length < 4) {
-                        const np = adminPin + num;
-                        setAdminPin(np);
-                        setAdminPinError('');
+                        const np = adminPin + num; setAdminPin(np); setAdminPinError('');
                         if (np.length === 4) {
-                          if (np === '0142') {
-                            setIsAdmin(true);
-                            setShowAdminLogin(false);
-                            setAdminPin('');
-                          } else {
-                            setAdminPinError('Hatalı PIN!');
-                            setAdminPin('');
-                          }
+                          if (np === '0142') { setIsAdmin(true); setShowAdminLogin(false); setAdminPin(''); }
+                          else { setAdminPinError('Hatalı PIN!'); setAdminPin(''); }
                         }
                       }
-                    }} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-base font-semibold">
-                      {num === '⌫' ? '✕' : num}
-                    </button>
+                    }} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-base font-semibold">{num === '⌫' ? '✕' : num}</button>
                   ) : <div key={j} className="w-12 h-12" />)}
                 </div>
               ))}
