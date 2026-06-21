@@ -114,7 +114,7 @@ export default function DashboardPage() {
                 <button onClick={() => setShowStats(false)} className="p-1 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white"><FiX className="w-4 h-4" /></button>
               </div>
               <div className="h-[400px] sm:h-[500px]">
-                <iframe src="https://raw.githubusercontent.com/sahind01/kubra/refs/heads/main/index.html" className="w-full h-full" style={{ border: 'none' }} title="Maç İstatistikleri" sandbox="allow-scripts allow-same-origin" loading="lazy" />
+                <iframe src="https://macistatik.vercel.app/" className="w-full h-full" style={{ border: 'none' }} title="Maç İstatistikleri" sandbox="allow-scripts allow-same-origin" loading="lazy" />
               </div>
             </motion.div>
           )}
