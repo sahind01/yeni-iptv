@@ -187,3 +187,54 @@
 .splash-screen {
   @apply fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0a0a];
 }
+
+ /* Aydınlık Tema */
+.light-theme body,
+body:has(.light-theme) {
+  background: #f5f5f5 !important;
+  color: #111 !important;
+}
+
+.light-theme .bg-\[\#0a0a0a\] {
+  background: #f5f5f5 !important;
+}
+
+.light-theme .bg-\[\#0f0f0f\] {
+  background: #f0f0f0 !important;
+}
+
+.light-theme .bg-\[\#1a1a1a\] {
+  background: #ffffff !important;
+}
+
+.light-theme .bg-\[\#111\] {
+  background: #e5e5e5 !important;
+}
+
+.light-theme .text-white {
+  color: #111 !important;
+}
+
+.light-theme .text-gray-400 {
+  color: #555 !important;
+}
+
+.light-theme .text-gray-500 {
+  color: #666 !important;
+}
+
+.light-theme .border-gray-700 {
+  border-color: #ddd !important;
+}
+
+.light-theme .border-gray-800 {
+  border-color: #ddd !important;
+}
+
+.light-theme .bg-white\/5 {
+  background: rgba(0,0,0,0.03) !important;
+}
+
+.light-theme .bg-white\/10:hover {
+  background: rgba(0,0,0,0.06) !important;
+}
