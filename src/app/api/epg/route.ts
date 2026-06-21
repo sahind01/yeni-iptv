@@ -15,6 +15,7 @@ export async function GET(request: Request) {
   ];
 
   const allOnAir: any[] = [];
+  let currentTime = '';
 
   for (const url of urls) {
     try {
@@ -23,7 +24,6 @@ export async function GET(request: Request) {
       
       const xml = await res.text();
 
-      // Kanal isimleri - .tr ile biten format
       const channels: Record<string, string> = {};
       const chRegex = /<channel id="([^"]*)">\s*<display-name>([^<]*)<\/display-name>/g;
       let m;
@@ -31,16 +31,14 @@ export async function GET(request: Request) {
         channels[m[1]] = m[2].trim();
       }
 
-      // Şimdiki zaman - XML'deki format: 20260621193000 +0300
       const now = new Date();
       const offset = -now.getTimezoneOffset();
       const offsetHours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
       const offsetMins = String(Math.abs(offset) % 60).padStart(2, '0');
       const offsetSign = offset >= 0 ? '+' : '-';
       const pad = (n: number) => String(n).padStart(2, '0');
-      const currentTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())} ${offsetSign}${offsetHours}${offsetMins}`;
+      currentTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())} ${offsetSign}${offsetHours}${offsetMins}`;
 
-      // Tüm programme bloklarını bul
       const blocks = xml.match(/<programme[\s\S]*?<\/programme>/g) || [];
 
       for (const block of blocks) {
