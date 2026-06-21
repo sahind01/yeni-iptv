@@ -251,11 +251,11 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* REKLAM - DAHA ÇEKİCİ */}
-      <div className="bg-gradient-to-r from-yellow-500/5 via-orange-500/5 to-red-500/5 border border-yellow-500/20 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 flex items-center justify-between">
+      {/* REKLAM */}
+      <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-red-500/10 border-b border-gray-700/30">
           <div className="flex items-center gap-3">
-            <span className="text-2xl animate-bounce">🎁</span>
+            <span className="text-2xl">🎁</span>
             <div>
               <p className="text-xs text-white font-semibold">Bu yayınları ücretsiz izliyorsun!</p>
               <p className="text-[10px] text-yellow-400/80 mt-0.5">Bize destek olmak için aşağıdaki reklama tıklar mısın? ✨</p>
@@ -263,7 +263,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           </div>
           <FiHeart className="w-5 h-5 text-red-400 animate-pulse flex-shrink-0" />
         </div>
-        <div className="px-2 pb-3 flex justify-center" ref={adRef} />
+        <div className="p-3 flex justify-center bg-[#111]" ref={adRef} />
       </div>
 
       {/* SOHBET */}
