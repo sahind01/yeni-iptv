@@ -9,52 +9,49 @@ export async function GET() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
 
-    // Kanal isimleri
-    const channels: Record<string, string> = {};
-    const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
-    let m;
-    while ((m = chRegex.exec(xml)) !== null) {
-      let name = m[2].trim().replace(/^TR:\s*/i, '');
-      channels[m[1]] = name;
+    // XML'den ilk 10 programı direkt çek - hiçbir filtre yok
+    const programmes: any[] = [];
+    
+    // programme bloklarını tek tek bul
+    const blocks = xml.split('<programme ');
+    
+    for (let i = 1; i < Math.min(blocks.length, 20); i++) {
+      const block = blocks[i];
+      const startMatch = block.match(/start="([^"]*)"/);
+      const stopMatch = block.match(/stop="([^"]*)"/);
+      const channelMatch = block.match(/channel="([^"]*)"/);
+      const titleMatch = block.match(/<title[^>]*>([^<]*)<\/title>/);
+      
+      if (startMatch && stopMatch && titleMatch) {
+        // Kanal adını bul
+        let channelName = channelMatch ? channelMatch[1] : 'unknown';
+        const chBlock = xml.split(`id="${channelName}"`)[1];
+        if (chBlock) {
+          const displayMatch = chBlock.match(/<display-name[^>]*>([^<]*)<\/display-name>/);
+          if (displayMatch) {
+            channelName = displayMatch[1].trim().replace(/^TR:\s*/i, '');
+          }
+        }
+        
+        programmes.push({
+          start: startMatch[1],
+          stop: stopMatch[1],
+          channel: channelName,
+          title: titleMatch[1].trim(),
+        });
+      }
     }
 
-    // Test: ilk 3 programı al, zaman kontrolü YAPMADAN
-    const programmes: any[] = [];
-    const pRegex = /<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)"[^>]*>[\s\S]*?<title[^>]*>([^<]*)<\/title>/g;
-
-    // Şu anki UTC zaman
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const currentTime = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())} +0000`;
 
-    let firstStart = '';
-    let firstStop = '';
-
-    while ((m = pRegex.exec(xml)) !== null) {
-      if (!firstStart) {
-        firstStart = m[1];
-        firstStop = m[2];
-      }
-
-      if (m[1] <= currentTime && m[2] >= currentTime) {
-        programmes.push({
-          channel: channels[m[3]] || m[3],
-          title: m[4].trim(),
-          start: m[1],
-          stop: m[2],
-        });
-      }
-
-      if (programmes.length >= 50) break;
-    }
-
     return NextResponse.json({
       success: true,
       currentTime,
-      firstProgrammeStart: firstStart,
-      firstProgrammeStop: firstStop,
-      total: programmes.length,
-      onAir: programmes,
+      xmlLength: xml.length,
+      programmeBlocks: blocks.length,
+      sampleProgrammes: programmes,
     });
 
   } catch (e: any) {
