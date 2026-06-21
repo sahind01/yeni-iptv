@@ -23,6 +23,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
   const adRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { currentChannel, channels, setCurrentChannel } = useStore();
 
   const [playerState, setPlayerState] = useState({
@@ -52,6 +53,20 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const handleRelatedChannelClick = (channel: typeof channels[0]) => {
     setCurrentChannel(channel);
   };
+
+  // Yatay kaydırma için wheel event
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      container.scrollLeft += e.deltaY;
+    };
+    
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [relatedChannels]);
 
   useEffect(() => {
     const savedNick = localStorage.getItem('mutlu_chat_nick');
@@ -197,7 +212,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     if (navigator.share) {
       navigator.share({
         title: currentChannel?.name || 'Mutlu Player',
-        text: `📺 ${currentChannel?.name} kanalını izliyorum! Sen de katıl! 🎉\n👉 ${window.location.href}`,
+        text: `📺 ${currentChannel?.name} kanalını izliyorum! Sen de katıl! 🎉`,
         url: window.location.href,
       }).catch(() => {
         navigator.clipboard.writeText(window.location.href);
@@ -277,25 +292,36 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         <div className="p-3 flex justify-center bg-[#111]" ref={adRef} />
       </div>
 
-      {/* AYNI KATEGORİDEKİ DİĞER KANALLAR */}
+      {/* AYNI KATEGORİDEKİ DİĞER KANALLAR - YATAY KAYDIRMA */}
       {relatedChannels.length > 0 && (
         <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
           <div className="px-3 py-2 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-b border-gray-700/30">
             <p className="text-[11px] text-white font-medium">
-              📺 {currentChannel.group || 'Benzer'} Kategorisindeki Kanallar
+              📺 {currentChannel.group || 'Benzer'} Kanallar
             </p>
           </div>
           <div className="p-2">
-            <div className="flex gap-2 overflow-x-auto touch-pan-x" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+            <div 
+              ref={scrollContainerRef}
+              className="flex gap-2 overflow-x-auto scroll-smooth"
+              style={{ 
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                scrollSnapType: 'x mandatory',
+                msOverflowStyle: 'none',
+                scrollbarWidth: 'none',
+              }}
+            >
               {relatedChannels.map((ch) => (
                 <button
                   key={ch.id}
-                  onClick={(e) => { e.stopPropagation(); handleRelatedChannelClick(ch); }}
-                  className="flex-shrink-0 w-24 bg-white/5 hover:bg-white/10 rounded-lg p-2 cursor-pointer transition-all border border-gray-700/30 active:scale-95"
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleRelatedChannelClick(ch); }}
+                  className="flex-shrink-0 w-24 bg-white/5 hover:bg-white/10 rounded-lg p-2 cursor-pointer transition-all border border-gray-700/30 active:scale-95 scroll-snap-align-start"
+                  style={{ scrollSnapAlign: 'start' }}
                 >
                   <div className="w-full aspect-video bg-[#111] rounded flex items-center justify-center mb-1">
                     {ch.logo && !ch.logo.includes('default') ? (
-                      <img src={ch.logo} alt={ch.name} className="max-w-full max-h-full object-contain p-1" loading="lazy" />
+                      <img src={ch.logo} alt={ch.name} className="max-w-full max-h-full object-contain p-1" loading="lazy" draggable="false" />
                     ) : (
                       <span className="text-base font-bold text-gray-500">{ch.name.charAt(0)}</span>
                     )}
