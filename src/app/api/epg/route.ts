@@ -8,43 +8,33 @@ export async function GET() {
     
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     
-    const data = await res.json();
+    const xml = await res.text();
+    
+    const channels: Record<string, string> = {};
+    const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
+    let m;
+    while ((m = chRegex.exec(xml)) !== null) {
+      channels[m[1]] = m[2].trim();
+    }
     
     const now = new Date();
     const currentTime = now.toISOString();
+    const programmes: any[] = [];
+    const pRegex = /<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)"[^>]*>[\s\S]*?<title[^>]*>([^<]*)<\/title>/g;
     
-    const onAir: any[] = [];
-    
-    // Tüm kanalları tara
-    for (const channel of data.channels || []) {
-      const channelName = channel.name || channel.id || 'Bilinmiyor';
-      
-      // Sadece popüler kanalları al
-      const popularKeywords = ['TRT', 'ATV', 'STAR', 'KANAL D', 'SHOW', 'FOX', 'TV8', 'BEIN', 'A SPOR', 'CNN', 'NTV', 'HABERTÜRK', 'BLOOMBERG', 'EURO', 'S SPOR', 'TIVIBU', 'D SMART'];
-      const isPopular = popularKeywords.some(k => channelName.toUpperCase().includes(k));
-      
-      if (!isPopular) continue;
-      
-      for (const programme of channel.programs || []) {
-        if (programme.start <= currentTime && programme.stop >= currentTime) {
-          onAir.push({
-            channel: channelName,
-            title: programme.title || 'Bilinmiyor',
-            start: programme.start,
-            stop: programme.stop,
-          });
-          break;
-        }
+    while ((m = pRegex.exec(xml)) !== null) {
+      if (m[1] <= currentTime && m[2] >= currentTime) {
+        programmes.push({
+          channel: channels[m[3]] || m[3],
+          title: m[4].trim(),
+          start: m[1],
+          stop: m[2],
+        });
       }
-      
-      if (onAir.length >= 30) break;
+      if (programmes.length > 5000) break;
     }
     
-    if (onAir.length === 0) {
-      return NextResponse.json({ success: false, error: 'Şu an yayın bulunamadı' });
-    }
-    
-    return NextResponse.json({ success: true, onAir });
+    return NextResponse.json({ success: true, total: programmes.length, onAir: programmes.slice(0, 50) });
     
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message });
