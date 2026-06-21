@@ -6,7 +6,6 @@ import { useStore } from '@/store/useStore';
 import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
 import { db } from '@/services/firebase';
-import { useRouter } from 'next/navigation';
 
 interface Message {
   id: string;
@@ -17,15 +16,14 @@ interface Message {
 
 const MAX_MESSAGES = 15;
 
-export default function VideoPlayer({ onBack, onChannelChange }: { onBack?: () => void; onChannelChange?: (direction: 'prev' | 'next') => void }) {
+export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
   const adRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
-  const { currentChannel, channels } = useStore();
-  const router = useRouter();
+  const { currentChannel, channels, setCurrentChannel } = useStore();
 
   const [playerState, setPlayerState] = useState({
     isPlaying: false, isMuted: false, volume: 1, currentTime: 0, duration: 0,
@@ -53,8 +51,7 @@ export default function VideoPlayer({ onBack, onChannelChange }: { onBack?: () =
   }, [currentChannel?.group, channels, currentChannel?.id]);
 
   const handleRelatedChannelClick = (channel: typeof channels[0]) => {
-    useStore.getState().addToChannelHistory(channel);
-    useStore.getState().setCurrentChannel(channel);
+    setCurrentChannel(channel);
   };
 
   useEffect(() => {
@@ -281,7 +278,7 @@ export default function VideoPlayer({ onBack, onChannelChange }: { onBack?: () =
         <div className="p-3 flex justify-center bg-[#111]" ref={adRef} />
       </div>
 
-      {/* AYNI KATEGORİDEKİ DİĞER KANALLAR */}
+      {/* AYNI KATEGORİDEKİ DİĞER KANALLAR - SOHBETTEN ÖNCE */}
       {relatedChannels.length > 0 && (
         <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
           <div className="px-4 py-2.5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-b border-gray-700/30">
