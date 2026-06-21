@@ -6,7 +6,7 @@ import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
 import type { UserSettings } from '@/types';
 import { QUALITY_OPTIONS } from '@/utils/constants';
-import { FiMoon, FiSun, FiPlay, FiGlobe, FiLock, FiChevronRight } from 'react-icons/fi';
+import { FiMoon, FiSun, FiPlay, FiGlobe, FiLock, FiChevronRight, FiDownload, FiSmartphone } from 'react-icons/fi';
 import PinModal from '@/components/UI/PinModal';
 import toast from 'react-hot-toast';
 
@@ -21,18 +21,59 @@ export default function SettingsPage() {
   });
   const [showPinModal, setShowPinModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSGuide, setShowIOSGuide] = useState(false);
 
   useEffect(() => {
     if (userId) {
       loadSettings();
+      applyTheme();
     }
+    
+    const ios = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+    setIsIOS(ios);
+    
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, [userId]);
 
   const loadSettings = async () => {
     if (!userId) return;
     const userData = await FirebaseService.getUserData(userId);
     if (userData?.settings) {
-      setSettings(userData.settings as UserSettings);
+      const s = userData.settings as UserSettings;
+      setSettings(s);
+      applyThemeDirect(s.theme);
+    }
+  };
+
+  const applyTheme = () => {
+    const savedTheme = localStorage.getItem('mutlu_theme') as 'dark' | 'light' | null;
+    if (savedTheme) {
+      applyThemeDirect(savedTheme);
+    }
+  };
+
+  const applyThemeDirect = (theme: 'dark' | 'light') => {
+    if (theme === 'light') {
+      document.documentElement.style.setProperty('--bg-color', '#f5f5f5');
+      document.documentElement.style.setProperty('--text-color', '#111');
+      document.documentElement.style.setProperty('--card-bg', '#ffffff');
+      document.documentElement.style.setProperty('--sidebar-bg', '#f0f0f0');
+      document.documentElement.style.setProperty('--border-color', '#ddd');
+      document.documentElement.classList.add('light-theme');
+    } else {
+      document.documentElement.style.setProperty('--bg-color', '#0a0a0a');
+      document.documentElement.style.setProperty('--text-color', '#fff');
+      document.documentElement.style.setProperty('--card-bg', '#1a1a1a');
+      document.documentElement.style.setProperty('--sidebar-bg', '#0f0f0f');
+      document.documentElement.style.setProperty('--border-color', '#374151');
+      document.documentElement.classList.remove('light-theme');
     }
   };
 
@@ -43,12 +84,22 @@ export default function SettingsPage() {
     const newSettings: UserSettings = { ...settings, [key]: value };
     setSettings(newSettings);
 
+    // Tema değişirse anında uygula
+    if (key === 'theme') {
+      applyThemeDirect(value);
+      localStorage.setItem('mutlu_theme', value);
+    }
+
     try {
       await FirebaseService.updateUserSettings(userId, newSettings);
       toast.success('Ayar kaydedildi');
     } catch (err) {
       toast.error('Ayar kaydedilemedi');
       setSettings(settings);
+      if (key === 'theme') {
+        applyThemeDirect(settings.theme);
+        localStorage.setItem('mutlu_theme', settings.theme);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -59,21 +110,74 @@ export default function SettingsPage() {
     toast.success('PIN başarıyla değiştirildi');
   };
 
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        toast.success('Uygulama yükleniyor...');
+      }
+      setDeferredPrompt(null);
+    } else if (isIOS) {
+      setShowIOSGuide(true);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="p-4 lg:p-8 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Ayarlar</h1>
+        <h1 className="text-2xl font-bold mb-6" style={{ color: 'var(--text-color)' }}>Ayarlar</h1>
+
+        {/* Uygulamayı Yükle */}
+        <div className="glass-card p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <FiDownload className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Uygulamayı Yükle</h3>
+                <p className="text-xs text-gray-500">Ana ekrana ekleyerek hızlı erişim sağlayın</p>
+              </div>
+            </div>
+            <button onClick={handleInstall}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-xl text-xs font-medium transition-all">
+              <FiDownload className="w-3.5 h-3.5" />
+              <span>{isIOS ? 'Kur' : 'Yükle'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* iOS Rehberi */}
+        {showIOSGuide && (
+          <div className="glass-card p-4 mb-4 border border-blue-500/30">
+            <div className="flex items-start space-x-3">
+              <FiSmartphone className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-white mb-2">iOS Kurulum Adımları</h3>
+                <ol className="text-xs text-gray-400 space-y-1.5">
+                  <li>1. Safari'de paylaş butonuna <span className="text-blue-400">📤</span> tıklayın</li>
+                  <li>2. "<span className="text-white">Ana Ekrana Ekle</span>" seçeneğine tıklayın</li>
+                  <li>3. Açılan pencerede "<span className="text-white">Ekle</span>" ye tıklayın</li>
+                </ol>
+                <button onClick={() => setShowIOSGuide(false)} className="mt-3 text-xs text-blue-400 hover:text-blue-300">
+                  Anladım, kapat
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Kullanıcı Bilgisi */}
         <div className="glass-card p-4 mb-6">
           <h3 className="text-sm text-gray-400 mb-2">Hesap Bilgileri</h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm">Kullanıcı Adı</span>
+              <span className="text-sm" style={{ color: 'var(--text-color)' }}>Kullanıcı Adı</span>
               <span className="text-sm text-gray-400">{username}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm">Site</span>
+              <span className="text-sm" style={{ color: 'var(--text-color)' }}>Site</span>
               <span className="text-sm text-gray-400">{site}</span>
             </div>
           </div>
@@ -84,27 +188,13 @@ export default function SettingsPage() {
           <div className="glass-card p-4">
             <h3 className="text-sm text-gray-400 mb-3">Tema</h3>
             <div className="flex space-x-2">
-              <button
-                onClick={() => handleSave('theme', 'dark')}
-                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl transition-all ${
-                  settings.theme === 'dark'
-                    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-                    : 'bg-white/5 border border-transparent hover:bg-white/10'
-                }`}
-              >
-                <FiMoon className="w-4 h-4" />
-                <span className="text-sm">Karanlık</span>
+              <button onClick={() => handleSave('theme', 'dark')}
+                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl transition-all ${settings.theme === 'dark' ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-white/5 border border-transparent hover:bg-white/10'}`}>
+                <FiMoon className="w-4 h-4" /><span className="text-sm">Karanlık</span>
               </button>
-              <button
-                onClick={() => handleSave('theme', 'light')}
-                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl transition-all ${
-                  settings.theme === 'light'
-                    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-                    : 'bg-white/5 border border-transparent hover:bg-white/10'
-                }`}
-              >
-                <FiSun className="w-4 h-4" />
-                <span className="text-sm">Aydınlık</span>
+              <button onClick={() => handleSave('theme', 'light')}
+                className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-xl transition-all ${settings.theme === 'light' ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-white/5 border border-transparent hover:bg-white/10'}`}>
+                <FiSun className="w-4 h-4" /><span className="text-sm">Aydınlık</span>
               </button>
             </div>
           </div>
@@ -114,40 +204,22 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FiPlay className="w-5 h-5 text-gray-400" />
-                <div>
-                  <h3 className="text-sm font-medium">Otomatik Oynatma</h3>
-                  <p className="text-xs text-gray-500">Kanal seçildiğinde otomatik başlat</p>
-                </div>
+                <div><h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Otomatik Oynatma</h3><p className="text-xs text-gray-500">Kanal seçildiğinde otomatik başlat</p></div>
               </div>
-              <button
-                onClick={() => handleSave('autoPlay', !settings.autoPlay)}
-                className={`w-12 h-7 rounded-full transition-colors relative ${
-                  settings.autoPlay ? 'bg-blue-500' : 'bg-gray-600'
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-transform ${
-                    settings.autoPlay ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
+              <button onClick={() => handleSave('autoPlay', !settings.autoPlay)}
+                className={`w-12 h-7 rounded-full transition-colors relative ${settings.autoPlay ? 'bg-blue-500' : 'bg-gray-600'}`}>
+                <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-transform ${settings.autoPlay ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
           </div>
 
-          {/* Kalite Tercihi */}
+          {/* Kalite */}
           <div className="glass-card p-4">
             <h3 className="text-sm text-gray-400 mb-3">Varsayılan Kalite</h3>
             <div className="grid grid-cols-2 gap-2">
               {QUALITY_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => handleSave('preferredQuality', option.value as UserSettings['preferredQuality'])}
-                  className={`p-3 rounded-xl text-sm transition-all ${
-                    settings.preferredQuality === option.value
-                      ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-                      : 'bg-white/5 border border-transparent hover:bg-white/10'
-                  }`}
-                >
+                <button key={option.value} onClick={() => handleSave('preferredQuality', option.value as UserSettings['preferredQuality'])}
+                  className={`p-3 rounded-xl text-sm transition-all ${settings.preferredQuality === option.value ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-white/5 border border-transparent hover:bg-white/10'}`}>
                   {option.label}
                 </button>
               ))}
@@ -159,16 +231,10 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FiGlobe className="w-5 h-5 text-gray-400" />
-                <div>
-                  <h3 className="text-sm font-medium">Dil</h3>
-                  <p className="text-xs text-gray-500">Arayüz dili</p>
-                </div>
+                <div><h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Dil</h3><p className="text-xs text-gray-500">Arayüz dili</p></div>
               </div>
-              <select
-                value={settings.language}
-                onChange={(e) => handleSave('language', e.target.value as UserSettings['language'])}
-                className="bg-white/5 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-              >
+              <select value={settings.language} onChange={(e) => handleSave('language', e.target.value as UserSettings['language'])}
+                className="bg-white/5 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
                 <option value="tr">🇹🇷 Türkçe</option>
                 <option value="en">🇬🇧 English</option>
               </select>
@@ -180,17 +246,11 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FiLock className="w-5 h-5 text-gray-400" />
-                <div>
-                  <h3 className="text-sm font-medium">Adult PIN</h3>
-                  <p className="text-xs text-gray-500">PIN kodunu değiştir</p>
-                </div>
+                <div><h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Adult PIN</h3><p className="text-xs text-gray-500">PIN kodunu değiştir</p></div>
               </div>
-              <button
-                onClick={() => setShowPinModal(true)}
-                className="flex items-center space-x-1 text-sm text-blue-400 hover:text-blue-300"
-              >
-                <span>Değiştir</span>
-                <FiChevronRight className="w-4 h-4" />
+              <button onClick={() => setShowPinModal(true)}
+                className="flex items-center space-x-1 text-sm text-blue-400 hover:text-blue-300">
+                <span>Değiştir</span><FiChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -199,24 +259,13 @@ export default function SettingsPage() {
           <div className="glass-card p-4">
             <h3 className="text-sm text-gray-400 mb-2">Uygulama Bilgisi</h3>
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Versiyon</span>
-                <span>1.0.0</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Platform</span>
-                <span>Next.js 15</span>
-              </div>
+              <div className="flex justify-between"><span className="text-gray-500">Versiyon</span><span style={{ color: 'var(--text-color)' }}>1.0.0</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Platform</span><span style={{ color: 'var(--text-color)' }}>Next.js 15</span></div>
             </div>
           </div>
         </div>
 
-        {/* PIN Modal */}
-        <PinModal
-          isOpen={showPinModal}
-          onSuccess={handlePinSuccess}
-          onClose={() => setShowPinModal(false)}
-        />
+        <PinModal isOpen={showPinModal} onSuccess={handlePinSuccess} onClose={() => setShowPinModal(false)} />
       </div>
     </MainLayout>
   );
