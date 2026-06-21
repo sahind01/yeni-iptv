@@ -46,11 +46,14 @@ export default function DashboardPage() {
     try {
       const res = await fetch('/api/epg');
       const data = await res.json();
-      if (data.success && data.onAir) {
+      console.log('EPG verisi:', data);
+      if (data.success && data.onAir && data.onAir.length > 0) {
         setTvProgrammes(data.onAir.slice(0, 15));
+      } else {
+        console.log('Veri boş veya hatalı:', data);
       }
     } catch (err) {
-      console.error('TV verisi alınamadı');
+      console.error('TV verisi alınamadı:', err);
     } finally {
       setTvLoading(false);
     }
