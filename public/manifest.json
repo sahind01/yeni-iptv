@@ -1,10 +1,10 @@
 {
-  "name": "Mutlu Player",
-  "short_name": "MutluPlayer",
+  "name": "Mutlu Player - IPTV",
+  "short_name": "Mutlu Player",
   "description": "Premium IPTV Deneyimi",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "portrait-primary",
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
   "icons": [
@@ -20,16 +20,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "screenshots": [
-    {
-      "src": "/splash/splash.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    }
-  ],
-  "categories": ["entertainment", "utilities"],
-  "lang": "tr-TR",
-  "prefer_related_applications": false
+  ]
 }
