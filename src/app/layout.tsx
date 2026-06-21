@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
+import InstallPrompt from '@/components/PWA/InstallPrompt';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -44,6 +45,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-512.png" />
       </head>
       <body className="min-h-screen bg-[#0a0a0a]">
+        <InstallPrompt />
         <Toaster
           position="top-center"
           toastOptions={{
