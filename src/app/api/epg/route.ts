@@ -9,31 +9,33 @@ export async function GET() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
 
-    // Kanal isimleri - TR: ile başlayanları temizle
+    // Kanal isimleri
     const channels: Record<string, string> = {};
     const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
     let m;
     while ((m = chRegex.exec(xml)) !== null) {
-      let name = m[2].trim();
-      // "TR: " kısmını kaldır, sadece kanal adını al
-      name = name.replace(/^TR:\s*/i, '');
+      let name = m[2].trim().replace(/^TR:\s*/i, '');
       channels[m[1]] = name;
     }
 
-    // Şimdiki zamanı XML formatına çevir: 20260621180900 +0000
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(now.getUTCDate()).padStart(2, '0');
-    const hour = String(now.getUTCHours()).padStart(2, '0');
-    const min = String(now.getUTCMinutes()).padStart(2, '0');
-    const sec = String(now.getUTCSeconds()).padStart(2, '0');
-    const currentTime = `${year}${month}${day}${hour}${min}${sec} +0000`;
-
+    // Test: ilk 3 programı al, zaman kontrolü YAPMADAN
     const programmes: any[] = [];
     const pRegex = /<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)"[^>]*>[\s\S]*?<title[^>]*>([^<]*)<\/title>/g;
 
+    // Şu anki UTC zaman
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const currentTime = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())} +0000`;
+
+    let firstStart = '';
+    let firstStop = '';
+
     while ((m = pRegex.exec(xml)) !== null) {
+      if (!firstStart) {
+        firstStart = m[1];
+        firstStop = m[2];
+      }
+
       if (m[1] <= currentTime && m[2] >= currentTime) {
         programmes.push({
           channel: channels[m[3]] || m[3],
@@ -42,14 +44,17 @@ export async function GET() {
           stop: m[2],
         });
       }
-      if (programmes.length > 5000) break;
+
+      if (programmes.length >= 50) break;
     }
 
     return NextResponse.json({
       success: true,
-      currentTime: currentTime,
+      currentTime,
+      firstProgrammeStart: firstStart,
+      firstProgrammeStop: firstStop,
       total: programmes.length,
-      onAir: programmes.slice(0, 50),
+      onAir: programmes,
     });
 
   } catch (e: any) {
