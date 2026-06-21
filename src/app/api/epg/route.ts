@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const res = await fetch('https://iptv-org.github.io/epg/guides/tr.json', {
+    const res = await fetch('https://raw.githubusercontent.com/Dodoizm35/epg-turkish/refs/heads/main/epg/index.xml', {
       signal: AbortSignal.timeout(10000)
     });
     
