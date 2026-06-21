@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import Hls from 'hls.js';
 import { useStore } from '@/store/useStore';
 import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
 import { db } from '@/services/firebase';
+import { useRouter } from 'next/navigation';
 
 interface Message {
   id: string;
@@ -16,14 +17,15 @@ interface Message {
 
 const MAX_MESSAGES = 15;
 
-export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
+export default function VideoPlayer({ onBack, onChannelChange }: { onBack?: () => void; onChannelChange?: (direction: 'prev' | 'next') => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
   const adRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
-  const { currentChannel } = useStore();
+  const { currentChannel, channels } = useStore();
+  const router = useRouter();
 
   const [playerState, setPlayerState] = useState({
     isPlaying: false, isMuted: false, volume: 1, currentTime: 0, duration: 0,
@@ -40,6 +42,20 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const [adminPin, setAdminPin] = useState('');
   const [adminPinError, setAdminPinError] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
+
+  // AYNI KATEGORİDEKİ KANALLAR
+  const relatedChannels = useMemo(() => {
+    if (!currentChannel?.group || !channels.length) return [];
+    const currentGroup = currentChannel.group.toLowerCase();
+    return channels
+      .filter(c => c.group.toLowerCase() === currentGroup && c.id !== currentChannel.id)
+      .slice(0, 10);
+  }, [currentChannel?.group, channels, currentChannel?.id]);
+
+  const handleRelatedChannelClick = (channel: typeof channels[0]) => {
+    useStore.getState().addToChannelHistory(channel);
+    useStore.getState().setCurrentChannel(channel);
+  };
 
   useEffect(() => {
     const savedNick = localStorage.getItem('mutlu_chat_nick');
@@ -217,7 +233,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           </div>
         )}
         
-        {/* ÜST BAR: GERİ + PAYLAŞ */}
         <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
           {onBack ? (
             <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button>
@@ -265,6 +280,40 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         </div>
         <div className="p-3 flex justify-center bg-[#111]" ref={adRef} />
       </div>
+
+      {/* AYNI KATEGORİDEKİ DİĞER KANALLAR */}
+      {relatedChannels.length > 0 && (
+        <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-b border-gray-700/30">
+            <p className="text-xs text-white font-medium">
+              📺 {currentChannel.group || 'Benzer'} Kategorisindeki Diğer Kanallar
+            </p>
+          </div>
+          <div className="p-3">
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              {relatedChannels.map((ch) => (
+                <button
+                  key={ch.id}
+                  onClick={() => handleRelatedChannelClick(ch)}
+                  className="flex-shrink-0 w-28 sm:w-32 bg-white/5 hover:bg-white/10 rounded-lg p-2 cursor-pointer transition-all border border-gray-700/30 hover:border-gray-500/50"
+                >
+                  <div className="w-full aspect-video bg-[#111] rounded flex items-center justify-center mb-1.5">
+                    {ch.logo && !ch.logo.includes('default') ? (
+                      <img src={ch.logo} alt={ch.name} className="max-w-full max-h-full object-contain p-1" loading="lazy" />
+                    ) : (
+                      <span className="text-lg">{ch.name.charAt(0)}</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-white truncate text-center">{ch.name}</p>
+                  {ch.quality && ch.quality !== 'SD' && (
+                    <span className="text-[8px] bg-blue-500/20 text-blue-400 px-1 py-0.5 rounded mt-1 block text-center">{ch.quality}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SOHBET */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
