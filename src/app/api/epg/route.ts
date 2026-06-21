@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const res = await fetch('https://raw.githubusercontent.com/Dodoizm35/epg-turkish/main/epg/index.xml');
+    const res = await fetch('https://raw.githubusercontent.com/ahmethascelik/epghost/main/xmltv.xml');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
 
