@@ -58,6 +58,15 @@ export default function RootLayout({
             },
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js');
+              }
+            `,
+          }}
+        />
         {children}
       </body>
     </html>
