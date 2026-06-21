@@ -21,9 +21,9 @@ export default function SettingsPage() {
   });
   const [showPinModal, setShowPinModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
 
   useEffect(() => {
     if (userId) {
@@ -33,13 +33,25 @@ export default function SettingsPage() {
     
     const ios = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
     setIsIOS(ios);
+
+    // PWA kurulabilir mi kontrol et
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
     
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    if (!standalone) {
+      // beforeinstallprompt event'ini dinle
+      const handler = (e: Event) => {
+        e.preventDefault();
+        setCanInstall(true);
+        // Event'i sakla
+        (window as any).__pwaInstallEvent = e;
+      };
+      window.addEventListener('beforeinstallprompt', handler);
+      
+      // iOS'ta her zaman göster
+      if (ios) setCanInstall(true);
+      
+      return () => window.removeEventListener('beforeinstallprompt', handler);
+    }
   }, [userId]);
 
   const loadSettings = async () => {
@@ -54,42 +66,26 @@ export default function SettingsPage() {
 
   const applyTheme = () => {
     const savedTheme = localStorage.getItem('mutlu_theme') as 'dark' | 'light' | null;
-    if (savedTheme) {
-      applyThemeDirect(savedTheme);
-    }
+    if (savedTheme) applyThemeDirect(savedTheme);
   };
 
   const applyThemeDirect = (theme: 'dark' | 'light') => {
     if (theme === 'light') {
-      document.documentElement.style.setProperty('--bg-color', '#f5f5f5');
-      document.documentElement.style.setProperty('--text-color', '#111');
-      document.documentElement.style.setProperty('--card-bg', '#ffffff');
-      document.documentElement.style.setProperty('--sidebar-bg', '#f0f0f0');
-      document.documentElement.style.setProperty('--border-color', '#ddd');
       document.documentElement.classList.add('light-theme');
     } else {
-      document.documentElement.style.setProperty('--bg-color', '#0a0a0a');
-      document.documentElement.style.setProperty('--text-color', '#fff');
-      document.documentElement.style.setProperty('--card-bg', '#1a1a1a');
-      document.documentElement.style.setProperty('--sidebar-bg', '#0f0f0f');
-      document.documentElement.style.setProperty('--border-color', '#374151');
       document.documentElement.classList.remove('light-theme');
     }
   };
 
   const handleSave = async (key: keyof UserSettings, value: any) => {
     if (!userId) return;
-
     setIsSaving(true);
     const newSettings: UserSettings = { ...settings, [key]: value };
     setSettings(newSettings);
-
-    // Tema değişirse anında uygula
     if (key === 'theme') {
       applyThemeDirect(value);
       localStorage.setItem('mutlu_theme', value);
     }
-
     try {
       await FirebaseService.updateUserSettings(userId, newSettings);
       toast.success('Ayar kaydedildi');
@@ -111,42 +107,56 @@ export default function SettingsPage() {
   };
 
   const handleInstall = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        toast.success('Uygulama yükleniyor...');
-      }
-      setDeferredPrompt(null);
-    } else if (isIOS) {
+    if (isIOS) {
       setShowIOSGuide(true);
+      return;
+    }
+
+    const installEvent = (window as any).__pwaInstallEvent;
+    
+    if (installEvent) {
+      try {
+        await installEvent.prompt();
+        const result = await installEvent.userChoice;
+        if (result.outcome === 'accepted') {
+          toast.success('✅ Uygulama yükleniyor...');
+          setCanInstall(false);
+        }
+      } catch (err) {
+        console.log('Kurulum iptal edildi');
+      }
+    } else {
+      // Manuel kurulum talimatı
+      toast('Tarayıcı menüsünden "Ana Ekrana Ekle" seçeneğini kullanın', { icon: '📱' });
     }
   };
 
   return (
     <MainLayout>
       <div className="p-4 lg:p-8 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6" style={{ color: 'var(--text-color)' }}>Ayarlar</h1>
+        <h1 className="text-2xl font-bold mb-6 text-white">Ayarlar</h1>
 
         {/* Uygulamayı Yükle */}
-        <div className="glass-card p-4 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <FiDownload className="w-5 h-5" />
+        {canInstall && (
+          <div className="glass-card p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <FiDownload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-white">Uygulamayı Yükle</h3>
+                  <p className="text-xs text-gray-500">Ana ekrana ekleyerek hızlı erişim sağlayın</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Uygulamayı Yükle</h3>
-                <p className="text-xs text-gray-500">Ana ekrana ekleyerek hızlı erişim sağlayın</p>
-              </div>
+              <button onClick={handleInstall}
+                className="flex items-center space-x-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-xl text-xs font-medium transition-all">
+                <FiDownload className="w-3.5 h-3.5" />
+                <span>Yükle</span>
+              </button>
             </div>
-            <button onClick={handleInstall}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-xl text-xs font-medium transition-all">
-              <FiDownload className="w-3.5 h-3.5" />
-              <span>{isIOS ? 'Kur' : 'Yükle'}</span>
-            </button>
           </div>
-        </div>
+        )}
 
         {/* iOS Rehberi */}
         {showIOSGuide && (
@@ -173,11 +183,11 @@ export default function SettingsPage() {
           <h3 className="text-sm text-gray-400 mb-2">Hesap Bilgileri</h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm" style={{ color: 'var(--text-color)' }}>Kullanıcı Adı</span>
+              <span className="text-sm text-white">Kullanıcı Adı</span>
               <span className="text-sm text-gray-400">{username}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm" style={{ color: 'var(--text-color)' }}>Site</span>
+              <span className="text-sm text-white">Site</span>
               <span className="text-sm text-gray-400">{site}</span>
             </div>
           </div>
@@ -204,7 +214,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FiPlay className="w-5 h-5 text-gray-400" />
-                <div><h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Otomatik Oynatma</h3><p className="text-xs text-gray-500">Kanal seçildiğinde otomatik başlat</p></div>
+                <div><h3 className="text-sm font-medium text-white">Otomatik Oynatma</h3><p className="text-xs text-gray-500">Kanal seçildiğinde otomatik başlat</p></div>
               </div>
               <button onClick={() => handleSave('autoPlay', !settings.autoPlay)}
                 className={`w-12 h-7 rounded-full transition-colors relative ${settings.autoPlay ? 'bg-blue-500' : 'bg-gray-600'}`}>
@@ -231,10 +241,10 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FiGlobe className="w-5 h-5 text-gray-400" />
-                <div><h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Dil</h3><p className="text-xs text-gray-500">Arayüz dili</p></div>
+                <div><h3 className="text-sm font-medium text-white">Dil</h3><p className="text-xs text-gray-500">Arayüz dili</p></div>
               </div>
               <select value={settings.language} onChange={(e) => handleSave('language', e.target.value as UserSettings['language'])}
-                className="bg-white/5 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                className="bg-white/5 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white">
                 <option value="tr">🇹🇷 Türkçe</option>
                 <option value="en">🇬🇧 English</option>
               </select>
@@ -246,7 +256,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FiLock className="w-5 h-5 text-gray-400" />
-                <div><h3 className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>Adult PIN</h3><p className="text-xs text-gray-500">PIN kodunu değiştir</p></div>
+                <div><h3 className="text-sm font-medium text-white">Adult PIN</h3><p className="text-xs text-gray-500">PIN kodunu değiştir</p></div>
               </div>
               <button onClick={() => setShowPinModal(true)}
                 className="flex items-center space-x-1 text-sm text-blue-400 hover:text-blue-300">
@@ -259,8 +269,8 @@ export default function SettingsPage() {
           <div className="glass-card p-4">
             <h3 className="text-sm text-gray-400 mb-2">Uygulama Bilgisi</h3>
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-gray-500">Versiyon</span><span style={{ color: 'var(--text-color)' }}>1.0.0</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Platform</span><span style={{ color: 'var(--text-color)' }}>Next.js 15</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Versiyon</span><span className="text-white">1.0.0</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Platform</span><span className="text-white">Next.js 15</span></div>
             </div>
           </div>
         </div>
