@@ -4,64 +4,76 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  try {
-    const res = await fetch('https://raw.githubusercontent.com/ahmethascelik/epghost/main/xmltv.xml');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const xml = await res.text();
+  const urls = [
+    'https://www.open-epg.com/files/turkey1.xml',
+    'https://www.open-epg.com/files/turkey2.xml',
+    'https://www.open-epg.com/files/turkey3.xml',
+    'https://www.open-epg.com/files/turkey4.xml',
+    'https://epgshare01.online/epgshare01/epg_ripper_TR1.xml.gz',
+    'https://epgshare01.online/epgshare01/epg_ripper_TR3.xml.gz',
+  ];
 
-    // Program bloklarını bul - XML'de <programme> diye aranacak
-    const programmeMatches = xml.match(/<programme[\s\S]*?<\/programme>/g);
-    
-    if (!programmeMatches || programmeMatches.length === 0) {
-      return NextResponse.json({ success: false, error: 'Hiç program bulunamadı', xmlLength: xml.length });
-    }
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) continue;
+      
+      let xml = await res.text();
+      
+      // .gz dosyasıysa açmayı dene (basit kontrol)
+      if (url.endsWith('.gz')) {
+        try {
+          const decompressed = new Response(res.body?.pipeThrough(new DecompressionStream('gzip')));
+          xml = await decompressed.text();
+        } catch (e) {
+          continue;
+        }
+      }
 
-    // Kanal isimlerini çıkar
-    const channels: Record<string, string> = {};
-    const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
-    let m;
-    while ((m = chRegex.exec(xml)) !== null) {
-      channels[m[1]] = m[2].trim().replace(/^TR:\s*/i, '');
-    }
+      // programme tag'lerini bul
+      if (!xml.includes('<programme')) continue;
 
-    // Şimdiki zaman
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const currentTime = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())} +0000`;
+      // Kanal isimleri
+      const channels: Record<string, string> = {};
+      const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
+      let m;
+      while ((m = chRegex.exec(xml)) !== null) {
+        channels[m[1]] = m[2].trim().replace(/^TR:\s*/i, '');
+      }
 
-    const onAir: any[] = [];
+      // Şimdiki zaman
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const currentTime = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())} +0000`;
 
-    for (const block of programmeMatches) {
-      const startMatch = block.match(/start="([^"]*)"/);
-      const stopMatch = block.match(/stop="([^"]*)"/);
-      const channelMatch = block.match(/channel="([^"]*)"/);
-      const titleMatch = block.match(/<title[^>]*>([^<]*)<\/title>/);
+      const onAir: any[] = [];
+      const blocks = xml.match(/<programme[\s\S]*?<\/programme>/g) || [];
 
-      if (startMatch && stopMatch && titleMatch && channelMatch) {
-        const start = startMatch[1];
-        const stop = stopMatch[1];
-        
-        if (start <= currentTime && stop >= currentTime) {
+      for (const block of blocks) {
+        const start = block.match(/start="([^"]*)"/)?.[1];
+        const stop = block.match(/stop="([^"]*)"/)?.[1];
+        const chId = block.match(/channel="([^"]*)"/)?.[1];
+        const title = block.match(/<title[^>]*>([^<]*)<\/title>/)?.[1];
+
+        if (start && stop && title && chId && start <= currentTime && stop >= currentTime) {
           onAir.push({
-            channel: channels[channelMatch[1]] || channelMatch[1],
-            title: titleMatch[1].trim(),
+            channel: channels[chId] || chId,
+            title: title.trim(),
             start,
             stop,
           });
         }
+        if (onAir.length >= 50) break;
       }
 
-      if (onAir.length >= 50) break;
+      if (onAir.length > 0) {
+        return NextResponse.json({ success: true, source: url, onAir });
+      }
+
+    } catch (e) {
+      continue;
     }
-
-    return NextResponse.json({
-      success: true,
-      currentTime,
-      totalProgrammes: programmeMatches.length,
-      onAir,
-    });
-
-  } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message });
   }
+
+  return NextResponse.json({ success: false, error: 'Hiçbir kaynaktan veri alınamadı' });
 }
