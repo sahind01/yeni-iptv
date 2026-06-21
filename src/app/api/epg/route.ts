@@ -9,15 +9,18 @@ export async function GET() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
 
-    // Kanal isimleri
+    // Kanal isimleri - TR: ile başlayanları temizle
     const channels: Record<string, string> = {};
     const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
     let m;
     while ((m = chRegex.exec(xml)) !== null) {
-      channels[m[1]] = m[2].trim();
+      let name = m[2].trim();
+      // "TR: " kısmını kaldır, sadece kanal adını al
+      name = name.replace(/^TR:\s*/i, '');
+      channels[m[1]] = name;
     }
 
-    // Şimdiki zamanı XML'deki formatta hazırla: 20260621180900 +0000
+    // Şimdiki zamanı XML formatına çevir: 20260621180900 +0000
     const now = new Date();
     const year = now.getUTCFullYear();
     const month = String(now.getUTCMonth() + 1).padStart(2, '0');
