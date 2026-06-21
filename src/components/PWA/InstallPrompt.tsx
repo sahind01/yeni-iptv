@@ -1,79 +1,106 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiDownload, FiX } from 'react-icons/fi';
+import { FiDownload, FiX, FiSmartphone } from 'react-icons/fi';
 
 export default function InstallPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showIOSGuide, setShowIOSGuide] = useState(false);
 
   useEffect(() => {
+    const ios = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+    setIsIOS(ios);
+    
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    setIsStandalone(standalone);
+
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowPrompt(true);
+      if (!standalone) {
+        setTimeout(() => setShowPrompt(true), 3000);
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handler);
 
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
-    };
+    if (ios && !standalone) {
+      setTimeout(() => setShowPrompt(true), 3000);
+    }
+
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
-
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
-      console.log('Uygulama yüklendi');
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      setDeferredPrompt(null);
+      setShowPrompt(false);
+    } else if (isIOS) {
+      setShowIOSGuide(true);
     }
-    
-    setDeferredPrompt(null);
-    setShowPrompt(false);
   };
+
+  if (isStandalone) return null;
 
   return (
     <AnimatePresence>
       {showPrompt && (
         <motion.div
-          initial={{ opacity: 0, y: 50 }}
+          initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-          className="fixed bottom-20 left-4 right-4 lg:left-auto lg:right-4 lg:bottom-4 
-            lg:w-96 z-50 bg-[#1a1a1a] border border-gray-700 rounded-2xl p-4 shadow-2xl"
+          exit={{ opacity: 0, y: -50 }}
+          className="fixed top-4 right-4 z-[200] max-w-sm"
         >
-          <div className="flex items-start space-x-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl 
-              flex items-center justify-center flex-shrink-0">
-              <FiDownload className="w-6 h-6" />
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold">Mutlu Player'ı Yükle</h3>
-              <p className="text-xs text-gray-400 mt-1">
-                Daha iyi bir deneyim için uygulamayı ana ekranınıza ekleyin.
-              </p>
-              
-              <div className="flex items-center space-x-2 mt-3">
-                <button
-                  onClick={handleInstall}
-                  className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Yükle
-                </button>
-                <button
-                  onClick={() => setShowPrompt(false)}
-                  className="px-3 py-2 hover:bg-white/5 rounded-lg transition-colors"
-                >
+          {showIOSGuide ? (
+            <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-4 shadow-2xl">
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <FiSmartphone className="text-blue-400" /> iOS Kurulum
+                </h3>
+                <button onClick={() => { setShowPrompt(false); setShowIOSGuide(false); }} className="text-gray-500 hover:text-white">
                   <FiX className="w-4 h-4" />
                 </button>
               </div>
+              <ol className="text-xs text-gray-300 space-y-2">
+                <li>1. Safari'de paylaş butonuna <span className="text-blue-400">📤</span> tıkla</li>
+                <li>2. "<span className="text-white font-medium">Ana Ekrana Ekle</span>" seç</li>
+                <li>3. Açılan pencerede "<span className="text-white font-medium">Ekle</span>" ye tıkla</li>
+              </ol>
+              <button onClick={() => { setShowPrompt(false); setShowIOSGuide(false); }} className="w-full mt-3 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-xs font-medium transition-all">
+                Anladım
+              </button>
             </div>
-          </div>
+          ) : (
+            <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-4 shadow-2xl">
+              <div className="flex items-start space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <FiDownload className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-white">Uygulamayı Yükle</h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {isIOS 
+                      ? 'Ana ekrana ekleyerek uygulama gibi kullanabilirsiniz.' 
+                      : 'Hızlı erişim için ana ekrana ekleyin.'}
+                  </p>
+                  <div className="flex items-center space-x-2 mt-3">
+                    <button onClick={handleInstall} className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-xs font-medium transition-all">
+                      {isIOS ? 'Nasıl Yapılır?' : '📱 Yükle'}
+                    </button>
+                    <button onClick={() => setShowPrompt(false)} className="px-3 py-2 hover:bg-white/5 rounded-lg transition-all">
+                      <FiX className="w-4 h-4 text-gray-400" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>
