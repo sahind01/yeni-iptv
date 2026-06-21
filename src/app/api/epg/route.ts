@@ -9,49 +9,56 @@ export async function GET() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
 
-    // XML'den ilk 10 programı direkt çek - hiçbir filtre yok
-    const programmes: any[] = [];
+    // Program bloklarını bul - XML'de <programme> diye aranacak
+    const programmeMatches = xml.match(/<programme[\s\S]*?<\/programme>/g);
     
-    // programme bloklarını tek tek bul
-    const blocks = xml.split('<programme ');
-    
-    for (let i = 1; i < Math.min(blocks.length, 20); i++) {
-      const block = blocks[i];
-      const startMatch = block.match(/start="([^"]*)"/);
-      const stopMatch = block.match(/stop="([^"]*)"/);
-      const channelMatch = block.match(/channel="([^"]*)"/);
-      const titleMatch = block.match(/<title[^>]*>([^<]*)<\/title>/);
-      
-      if (startMatch && stopMatch && titleMatch) {
-        // Kanal adını bul
-        let channelName = channelMatch ? channelMatch[1] : 'unknown';
-        const chBlock = xml.split(`id="${channelName}"`)[1];
-        if (chBlock) {
-          const displayMatch = chBlock.match(/<display-name[^>]*>([^<]*)<\/display-name>/);
-          if (displayMatch) {
-            channelName = displayMatch[1].trim().replace(/^TR:\s*/i, '');
-          }
-        }
-        
-        programmes.push({
-          start: startMatch[1],
-          stop: stopMatch[1],
-          channel: channelName,
-          title: titleMatch[1].trim(),
-        });
-      }
+    if (!programmeMatches || programmeMatches.length === 0) {
+      return NextResponse.json({ success: false, error: 'Hiç program bulunamadı', xmlLength: xml.length });
     }
 
+    // Kanal isimlerini çıkar
+    const channels: Record<string, string> = {};
+    const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
+    let m;
+    while ((m = chRegex.exec(xml)) !== null) {
+      channels[m[1]] = m[2].trim().replace(/^TR:\s*/i, '');
+    }
+
+    // Şimdiki zaman
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const currentTime = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())} +0000`;
 
+    const onAir: any[] = [];
+
+    for (const block of programmeMatches) {
+      const startMatch = block.match(/start="([^"]*)"/);
+      const stopMatch = block.match(/stop="([^"]*)"/);
+      const channelMatch = block.match(/channel="([^"]*)"/);
+      const titleMatch = block.match(/<title[^>]*>([^<]*)<\/title>/);
+
+      if (startMatch && stopMatch && titleMatch && channelMatch) {
+        const start = startMatch[1];
+        const stop = stopMatch[1];
+        
+        if (start <= currentTime && stop >= currentTime) {
+          onAir.push({
+            channel: channels[channelMatch[1]] || channelMatch[1],
+            title: titleMatch[1].trim(),
+            start,
+            stop,
+          });
+        }
+      }
+
+      if (onAir.length >= 50) break;
+    }
+
     return NextResponse.json({
       success: true,
       currentTime,
-      xmlLength: xml.length,
-      programmeBlocks: blocks.length,
-      sampleProgrammes: programmes,
+      totalProgrammes: programmeMatches.length,
+      onAir,
     });
 
   } catch (e: any) {
