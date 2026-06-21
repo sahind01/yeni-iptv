@@ -41,7 +41,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const [adminPinError, setAdminPinError] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
 
-  // AYNI KATEGORİDEKİ KANALLAR
   const relatedChannels = useMemo(() => {
     if (!currentChannel?.group || !channels.length) return [];
     const currentGroup = currentChannel.group.toLowerCase();
@@ -278,33 +277,30 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         <div className="p-3 flex justify-center bg-[#111]" ref={adRef} />
       </div>
 
-      {/* AYNI KATEGORİDEKİ DİĞER KANALLAR - SOHBETTEN ÖNCE */}
+      {/* AYNI KATEGORİDEKİ DİĞER KANALLAR */}
       {relatedChannels.length > 0 && (
         <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
-          <div className="px-4 py-2.5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-b border-gray-700/30">
-            <p className="text-xs text-white font-medium">
-              📺 {currentChannel.group || 'Benzer'} Kategorisindeki Diğer Kanallar
+          <div className="px-3 py-2 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-b border-gray-700/30">
+            <p className="text-[11px] text-white font-medium">
+              📺 {currentChannel.group || 'Benzer'} Kategorisindeki Kanallar
             </p>
           </div>
-          <div className="p-3">
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+          <div className="p-2">
+            <div className="flex gap-2 overflow-x-auto touch-pan-x" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
               {relatedChannels.map((ch) => (
                 <button
                   key={ch.id}
-                  onClick={() => handleRelatedChannelClick(ch)}
-                  className="flex-shrink-0 w-28 sm:w-32 bg-white/5 hover:bg-white/10 rounded-lg p-2 cursor-pointer transition-all border border-gray-700/30 hover:border-gray-500/50"
+                  onClick={(e) => { e.stopPropagation(); handleRelatedChannelClick(ch); }}
+                  className="flex-shrink-0 w-24 bg-white/5 hover:bg-white/10 rounded-lg p-2 cursor-pointer transition-all border border-gray-700/30 active:scale-95"
                 >
-                  <div className="w-full aspect-video bg-[#111] rounded flex items-center justify-center mb-1.5">
+                  <div className="w-full aspect-video bg-[#111] rounded flex items-center justify-center mb-1">
                     {ch.logo && !ch.logo.includes('default') ? (
                       <img src={ch.logo} alt={ch.name} className="max-w-full max-h-full object-contain p-1" loading="lazy" />
                     ) : (
-                      <span className="text-lg">{ch.name.charAt(0)}</span>
+                      <span className="text-base font-bold text-gray-500">{ch.name.charAt(0)}</span>
                     )}
                   </div>
-                  <p className="text-[10px] text-white truncate text-center">{ch.name}</p>
-                  {ch.quality && ch.quality !== 'SD' && (
-                    <span className="text-[8px] bg-blue-500/20 text-blue-400 px-1 py-0.5 rounded mt-1 block text-center">{ch.quality}</span>
-                  )}
+                  <p className="text-[9px] text-white truncate text-center leading-tight">{ch.name}</p>
                 </button>
               ))}
             </div>
