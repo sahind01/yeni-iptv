@@ -22,20 +22,25 @@ export async function GET(request: Request) {
       if (!res.ok) continue;
       
       const xml = await res.text();
-      if (!xml.includes('<programme')) continue;
 
-      // Kanal isimleri
+      // Kanal isimleri - .tr ile biten format
       const channels: Record<string, string> = {};
-      const chRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
+      const chRegex = /<channel id="([^"]*)">\s*<display-name>([^<]*)<\/display-name>/g;
       let m;
       while ((m = chRegex.exec(xml)) !== null) {
-        channels[m[1]] = m[2].trim().replace(/^TR:\s*/i, '');
+        channels[m[1]] = m[2].trim();
       }
 
+      // Şimdiki zaman - XML'deki format: 20260621193000 +0300
       const now = new Date();
+      const offset = -now.getTimezoneOffset();
+      const offsetHours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+      const offsetMins = String(Math.abs(offset) % 60).padStart(2, '0');
+      const offsetSign = offset >= 0 ? '+' : '-';
       const pad = (n: number) => String(n).padStart(2, '0');
-      const currentTime = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())} +0000`;
+      const currentTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())} ${offsetSign}${offsetHours}${offsetMins}`;
 
+      // Tüm programme bloklarını bul
       const blocks = xml.match(/<programme[\s\S]*?<\/programme>/g) || [];
 
       for (const block of blocks) {
@@ -45,9 +50,8 @@ export async function GET(request: Request) {
         const title = block.match(/<title[^>]*>([^<]*)<\/title>/)?.[1];
 
         if (start && stop && title && chId && start <= currentTime && stop >= currentTime) {
-          const chName = channels[chId] || chId;
+          const chName = channels[chId] || chId.replace('.tr', '');
           
-          // Arama filtresi
           if (searchQuery && !chName.toLowerCase().includes(searchQuery.toLowerCase()) && 
               !title.toLowerCase().includes(searchQuery.toLowerCase())) {
             continue;
@@ -59,11 +63,11 @@ export async function GET(request: Request) {
     } catch (e) { continue; }
   }
 
-  // Kanala göre sırala
   allOnAir.sort((a, b) => a.channel.localeCompare(b.channel));
 
   return NextResponse.json({
     success: true,
+    currentTime,
     total: allOnAir.length,
     searchQuery: searchQuery || null,
     onAir: allOnAir.slice(0, 100),
