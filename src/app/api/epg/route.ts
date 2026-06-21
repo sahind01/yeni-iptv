@@ -1,24 +1,45 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  // Manuel popüler kanal verisi - API çalışana kadar
-  const fallbackData = {
-    success: true,
-    onAir: [
-      { channel: 'TRT 1', title: 'Ana Haber Bülteni', start: '19:00', stop: '20:00' },
-      { channel: 'Star TV', title: 'Yalı Çapkını', start: '20:00', stop: '23:00' },
-      { channel: 'ATV', title: 'Kuruluş Osman', start: '20:00', stop: '23:00' },
-      { channel: 'Kanal D', title: 'Arka Sokaklar', start: '20:00', stop: '23:00' },
-      { channel: 'Show TV', title: 'Kızılcık Şerbeti', start: '20:00', stop: '23:00' },
-      { channel: 'FOX', title: 'Yabancı Damat', start: '20:00', stop: '23:00' },
-      { channel: 'TV8', title: 'MasterChef Türkiye', start: '20:00', stop: '00:00' },
-      { channel: 'beIN Sports 1', title: 'Süper Lig Maçı', start: '20:00', stop: '22:00' },
-      { channel: 'beIN Sports 2', title: 'Premier Lig', start: '20:00', stop: '22:00' },
-      { channel: 'CNN Türk', title: 'Ana Haber', start: '19:00', stop: '20:00' },
-      { channel: 'NTV', title: 'Haber Bülteni', start: '19:00', stop: '20:00' },
-      { channel: 'A Spor', title: 'Spor Gündemi', start: '20:00', stop: '22:00' },
-    ]
-  };
-
-  return NextResponse.json(fallbackData);
+  try {
+    const res = await fetch('https://www.open-epg.com/app/download.php?file=turkey3.xml');
+    if (!res.ok) throw new Error('EPG alınamadı');
+    
+    const xml = await res.text();
+    
+    // Kanalları çıkar
+    const channels: Record<string, string> = {};
+    const channelRegex = /<channel id="([^"]*)"[^>]*>[\s\S]*?<display-name[^>]*>([^<]*)<\/display-name>/g;
+    let match;
+    while ((match = channelRegex.exec(xml)) !== null) {
+      channels[match[1]] = match[2].trim();
+    }
+    
+    // Şu an yayında olan programları çıkar
+    const now = new Date();
+    const currentTime = now.toISOString();
+    const programmes: any[] = [];
+    const progRegex = /<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)"[^>]*>[\s\S]*?<title[^>]*>([^<]*)<\/title>/g;
+    
+    while ((match = progRegex.exec(xml)) !== null) {
+      if (match[1] <= currentTime && match[2] >= currentTime) {
+        const chName = channels[match[3]] || match[3];
+        programmes.push({
+          channel: chName,
+          start: match[1],
+          stop: match[2],
+          title: match[4].trim()
+        });
+      }
+      if (programmes.length > 2000) break;
+    }
+    
+    // Popüler kanalları filtrele
+    const keywords = ['TRT', 'Star', 'ATV', 'Kanal D', 'Show', 'FOX', 'TV8', 'beIN', 'S Sport', 'Tivibu', 'A Spor', 'CNN', 'NTV', 'Habertürk', 'Euro Sport'];
+    const filtered = programmes.filter(p => keywords.some(k => p.channel.toLowerCase().includes(k.toLowerCase())));
+    
+    return NextResponse.json({ success: true, onAir: filtered.slice(0, 30) });
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message });
+  }
 }
