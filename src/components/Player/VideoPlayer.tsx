@@ -70,9 +70,8 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     if (adRef.current) {
       adRef.current.innerHTML = '';
       const script = document.createElement('script');
-      script.src = 'https://www.highperformanceformat.com/17d00916f28f83916acf6ce35dca6c88/invoke.js';
+      script.src = 'https://pl29874256.effectivecpmnetwork.com/26/94/89/2694899d45f560d6e4f25079f8b48cdc.js';
       script.async = true;
-      (window as any).atOptions = { 'key': '17d00916f28f83916acf6ce35dca6c88', 'format': 'iframe', 'height': 50, 'width': 320, 'params': {} };
       adRef.current.appendChild(script);
     }
   }, [currentChannel?.url]);
