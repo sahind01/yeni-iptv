@@ -21,7 +21,8 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
-  const adRef = useRef<HTMLDivElement>(null);
+  const adRef1 = useRef<HTMLDivElement>(null);
+  const adRef2 = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const { currentChannel } = useStore();
 
@@ -66,13 +67,26 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [messages]);
 
+  // REKLAM 1
   useEffect(() => {
-    if (adRef.current) {
-      adRef.current.innerHTML = '';
+    if (adRef1.current) {
+      adRef1.current.innerHTML = '';
+      const script = document.createElement('script');
+      script.src = 'https://www.highperformanceformat.com/17d00916f28f83916acf6ce35dca6c88/invoke.js';
+      script.async = true;
+      (window as any).atOptions = { 'key': '17d00916f28f83916acf6ce35dca6c88', 'format': 'iframe', 'height': 50, 'width': 320, 'params': {} };
+      adRef1.current.appendChild(script);
+    }
+  }, [currentChannel?.url]);
+
+  // REKLAM 2
+  useEffect(() => {
+    if (adRef2.current) {
+      adRef2.current.innerHTML = '';
       const script = document.createElement('script');
       script.src = 'https://pl29874256.effectivecpmnetwork.com/26/94/89/2694899d45f560d6e4f25079f8b48cdc.js';
       script.async = true;
-      adRef.current.appendChild(script);
+      adRef2.current.appendChild(script);
     }
   }, [currentChannel?.url]);
 
@@ -249,7 +263,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* REKLAM */}
+      {/* REKLAM 1 */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-red-500/10 border-b border-gray-700/30">
           <div className="flex items-center gap-3">
@@ -261,7 +275,15 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           </div>
           <FiHeart className="w-5 h-5 text-red-400 animate-pulse flex-shrink-0" />
         </div>
-        <div className="p-3 flex justify-center bg-[#111]" ref={adRef} />
+        <div className="p-3 flex justify-center bg-[#111]" ref={adRef1} />
+      </div>
+
+      {/* REKLAM 2 */}
+      <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
+        <div className="px-4 py-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-gray-700/30">
+          <p className="text-[11px] text-white font-medium text-center">📢 Reklam</p>
+        </div>
+        <div className="p-3 flex justify-center bg-[#111]" ref={adRef2} />
       </div>
 
       {/* SOHBET */}
