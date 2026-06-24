@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { FiShield, FiSmartphone, FiLock, FiStar, FiSend, FiCheck, FiMessageSquare, FiX, FiTv, FiSearch } from 'react-icons/fi';
 import MainLayout from '@/components/Layout/MainLayout';
@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [formSending, setFormSending] = useState(false);
   const [formSent, setFormSent] = useState(false);
   const [formError, setFormError] = useState('');
+  const adRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -38,6 +39,17 @@ export default function DashboardPage() {
     else if (hour < 12) setGreeting('Günaydın');
     else if (hour < 18) setGreeting('İyi Günler');
     else setGreeting('İyi Akşamlar');
+  }, []);
+
+  // Dashboard reklamı
+  useEffect(() => {
+    if (adRef.current) {
+      adRef.current.innerHTML = '';
+      const script = document.createElement('script');
+      script.src = 'https://pl29874256.effectivecpmnetwork.com/26/94/89/2694899d45f560d6e4f25079f8b48cdc.js';
+      script.async = true;
+      adRef.current.appendChild(script);
+    }
   }, []);
 
   const fetchTVProgrammes = async (search = '') => {
@@ -85,9 +97,6 @@ export default function DashboardPage() {
 
   const formatTime = (timeStr: string) => {
     try {
-      const year = timeStr.substring(0, 4);
-      const month = timeStr.substring(4, 6);
-      const day = timeStr.substring(6, 8);
       const hour = timeStr.substring(8, 10);
       const min = timeStr.substring(10, 12);
       return `${hour}:${min}`;
@@ -103,6 +112,9 @@ export default function DashboardPage() {
           </h1>
           <p className="text-gray-400 text-sm mt-1">Bugün ne izlemek istersin?</p>
         </motion.div>
+
+        {/* REKLAM */}
+        <div className="mb-3 p-2 bg-[#1a1a1a] border border-gray-700/50 rounded-xl flex justify-center" ref={adRef} />
 
         {/* GÜNÜN MAÇLARI */}
         <div className="mb-3">
@@ -133,15 +145,12 @@ export default function DashboardPage() {
                 <h3 className="text-sm font-semibold text-white">📺 Şu An Yayında</h3>
                 <button onClick={() => { setShowTV(false); setTvSearch(''); }} className="text-gray-500 hover:text-white"><FiX className="w-4 h-4" /></button>
               </div>
-
-              {/* ARAMA */}
               <form onSubmit={handleSearch} className="relative mb-3">
                 <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-3.5 h-3.5" />
                 <input type="text" value={tvSearch} onChange={(e) => setTvSearch(e.target.value)}
                   placeholder="Kanal veya program ara..."
                   className="w-full bg-[#111] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
               </form>
-
               {tvLoading ? (
                 <div className="flex justify-center py-6"><div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>
               ) : tvProgrammes.length === 0 ? (
