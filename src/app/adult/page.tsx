@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
 import VideoPlayer from '@/components/Player/VideoPlayer';
 import { useStore } from '@/store/useStore';
@@ -33,6 +33,9 @@ export default function AdultPage() {
   const [pinError, setPinError] = useState('');
   const [savedPin, setSavedPin] = useState<string | null>(null);
 
+  const adRef1 = useRef<HTMLDivElement>(null);
+  const adRef2 = useRef<HTMLDivElement>(null);
+
   useEffect(() => { initPin(); }, [userId]);
   useEffect(() => { if (step === 'verified') fetchChannels(); }, [step]);
   useEffect(() => {
@@ -40,6 +43,35 @@ export default function AdultPage() {
     setFilteredChannels(q ? channels.filter(c => c.name.toLowerCase().includes(q)) : channels);
     setShowCount(20);
   }, [searchQuery, channels]);
+
+  // Adult Reklam 1
+  useEffect(() => {
+    if (adRef1.current && step === 'verified') {
+      adRef1.current.innerHTML = '';
+      const script = document.createElement('script');
+      script.src = 'https://pl29874768.effectivecpmnetwork.com/25/e4/31/25e431ad777206ccdebe6da4622a226d.js';
+      script.async = true;
+      adRef1.current.appendChild(script);
+    }
+  }, [step]);
+
+  // Adult Reklam 2
+  useEffect(() => {
+    if (adRef2.current && step === 'verified') {
+      adRef2.current.innerHTML = '';
+      (window as any).atOptions = {
+        'key': 'e5fe232337f8cb3eda77c72cbf12359c',
+        'format': 'iframe',
+        'height': 50,
+        'width': 320,
+        'params': {}
+      };
+      const script = document.createElement('script');
+      script.src = 'https://www.highperformanceformat.com/e5fe232337f8cb3eda77c72cbf12359c/invoke.js';
+      script.async = true;
+      adRef2.current.appendChild(script);
+    }
+  }, [step]);
 
   const initPin = async () => {
     const uid = userId || useStore.getState().userId;
@@ -103,7 +135,6 @@ export default function AdultPage() {
         cur = null;
       }
     }
-    console.log('Adult kanal sayısı:', result.length);
     return result;
   };
 
@@ -188,6 +219,12 @@ export default function AdultPage() {
             <button onClick={handleResetPin} className="px-3 py-1.5 bg-gray-800 rounded-lg text-xs">PIN</button>
             <button onClick={handleLock} className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-xs">Kilitle</button>
           </div>
+        </div>
+
+        {/* REKLAMLAR */}
+        <div className="space-y-2 mb-4">
+          <div className="p-2 bg-[#1a1a1a] border border-gray-700/50 rounded-xl flex justify-center" ref={adRef1} />
+          <div className="p-2 bg-[#1a1a1a] border border-gray-700/50 rounded-xl flex justify-center" ref={adRef2} />
         </div>
 
         <div className="relative mb-4">
