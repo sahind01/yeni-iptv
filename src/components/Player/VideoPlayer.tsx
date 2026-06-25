@@ -89,12 +89,10 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  // TÜM FORMATLARI DESTEKLEYEN PLAYER
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
 
-    // Önceki player'ı temizle
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -105,11 +103,52 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const url = currentChannel.url;
     const urlLower = url.toLowerCase();
 
-    // Canlı yayın mı?
-    const isLiveStream = urlLower.includes('.m3u8') && 
-      (urlLower.includes('live') || urlLower.includes('stream') || 
+    const isLiveStream = urlLower.includes('.m3u8') &&
+      (urlLower.includes('live') || urlLower.includes('stream') ||
        urlLower.includes('tv') || urlLower.includes('channel'));
     setPlayerState(prev => ({ ...prev, isLive: isLiveStream }));
+
+    // Native fallback fonksiyonu
+    const tryNativePlayback = () => {
+      if (!video) return;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      video.src = url;
+      video.load();
+      video.play()
+        .then(() => {
+          setPlayerState(prev => ({ ...prev, error: null, isPlaying: true }));
+          retryCount.current = 0;
+        })
+        .catch((err: any) => {
+          if (err.name === 'NotAllowedError') {
+            setPlayerState(prev => ({ ...prev, error: 'Oynatmak için ekrana tıklayın' }));
+          } else {
+            retryFallback();
+          }
+        });
+    };
+
+    const retryFallback = () => {
+      if (!video) return;
+      if (retryCount.current < 2) {
+        retryCount.current++;
+        setPlayerState(prev => ({ ...prev, error: `Yayın yükleniyor (${retryCount.current}/2)...` }));
+        setTimeout(() => {
+          if (video) {
+            video.src = url;
+            video.load();
+            video.play().catch(() => {
+              setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+            });
+          }
+        }, 2000 * retryCount.current);
+      } else {
+        setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+      }
+    };
 
     // HLS (.m3u8) - Hls.js ile
     if (urlLower.includes('.m3u8') && Hls.isSupported()) {
@@ -133,20 +172,17 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         retryCount.current = 0;
       });
 
-      hls.on(Hls.Events.ERROR, (event, data) => {
+      hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (retryCount.current < 3) {
                 retryCount.current++;
-                setPlayerState(prev => ({ ...prev, error: `Bağlantı hatası, yeniden deneniyor (${retryCount.current}/3)...` }));
+                setPlayerState(prev => ({ ...prev, error: `Bağlantı hatası (${retryCount.current}/3)...` }));
                 setTimeout(() => {
-                  if (hlsRef.current) {
-                    hlsRef.current.loadSource(url);
-                  }
+                  if (hlsRef.current) hlsRef.current.loadSource(url);
                 }, 2000 * retryCount.current);
               } else {
-                // HLS başarısız, native video ile dene
                 tryNativePlayback();
               }
               break;
@@ -159,56 +195,8 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           }
         }
       });
-    } 
-    // Native playback (MP4, TS, MKV, WebM, OGG, vb.)
-    else {
+    } else {
       tryNativePlayback();
-    }
-
-    function tryNativePlayback() {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-
-      video.src = url;
-      video.load();
-
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            setPlayerState(prev => ({ ...prev, error: null, isPlaying: true }));
-            retryCount.current = 0;
-          })
-          .catch((err) => {
-            console.log('Native play hatası:', err.message);
-            // Kullanıcı etkileşimi gerekiyorsa sessizce bekle
-            if (err.name === 'NotAllowedError') {
-              setPlayerState(prev => ({ ...prev, error: 'Oynatmak için ekrana tıklayın' }));
-            } else {
-              retryFallback();
-            }
-          });
-      }
-    }
-
-    function retryFallback() {
-      if (retryCount.current < 2) {
-        retryCount.current++;
-        setPlayerState(prev => ({ ...prev, error: `Yayın yükleniyor (${retryCount.current}/2)...` }));
-        setTimeout(() => {
-          if (video) {
-            video.src = url;
-            video.load();
-            video.play().catch(() => {
-              setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-            });
-          }
-        }, 2000 * retryCount.current);
-      } else {
-        setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-      }
     }
 
     return () => {
@@ -219,7 +207,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     };
   }, [currentChannel?.url]);
 
-  // Video olayları
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -230,8 +217,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const onDuration = () => setPlayerState(prev => ({ ...prev, duration: video.duration }));
     const onVolume = () => setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
     const onError = () => {
-      // Native error - otomatik tekrar dene
-      if (retryCount.current < 2 && currentChannel?.url) {
+      if (retryCount.current < 2 && currentChannel?.url && video) {
         retryCount.current++;
         setTimeout(() => {
           video.src = currentChannel.url;
@@ -242,10 +228,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
       }
     };
-    const onCanPlay = () => {
-      setPlayerState(prev => ({ ...prev, error: null }));
-      retryCount.current = 0;
-    };
+    const onCanPlay = () => { setPlayerState(prev => ({ ...prev, error: null })); retryCount.current = 0; };
     const onLoadedData = () => setPlayerState(prev => ({ ...prev, error: null }));
 
     video.addEventListener('play', onPlay);
@@ -373,56 +356,22 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="space-y-2">
-      {/* PLAYER */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video 
-          ref={videoRef} 
-          className="w-full h-full object-contain" 
-          playsInline 
-          autoPlay 
-          muted={false}
-          preload="auto"
-          crossOrigin="anonymous"
-          x5-video-player-type="h5"
-          x5-video-orientation="landscape"
-          x5-playsinline=""
-          webkit-playsinline=""
-        />
+        <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay preload="auto" crossOrigin="anonymous" />
         {playerState.error && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20" onClick={(e) => e.stopPropagation()}>
             <div className="text-center">
               <p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
-              <button 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  retryCount.current = 0;
-                  if (videoRef.current) { 
-                    videoRef.current.src = currentChannel.url;
-                    videoRef.current.load(); 
-                    videoRef.current.play().catch(() => {}); 
-                  }
-                }} 
-                className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm"
-              >
-                Tekrar Dene
-              </button>
+              <button onClick={(e) => { e.stopPropagation(); retryCount.current = 0; if (videoRef.current) { videoRef.current.src = currentChannel.url; videoRef.current.load(); videoRef.current.play().catch(() => {}); } }} className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm">Tekrar Dene</button>
             </div>
           </div>
         )}
-
         <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
-          {onBack ? (
-            <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button>
-          ) : <div />}
+          {onBack ? <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button> : <div />}
           <button onClick={(e) => { e.stopPropagation(); handleShare(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70 flex items-center gap-1.5">
-            {shareCopied ? (
-              <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></>
-            ) : (
-              <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>
-            )}
+            {shareCopied ? <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></> : <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>}
           </button>
         </div>
-
         <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pt-10 sm:pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           {!playerState.isLive && (
             <div className="mb-2 sm:mb-3"><div className="relative h-1.5 sm:h-2 bg-gray-600/50 rounded-full cursor-pointer" onClick={handleSeek}><div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }} /></div>
@@ -446,13 +395,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       {/* REKLAM 1 */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-red-500/10 border-b border-gray-700/30">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🎁</span>
-            <div>
-              <p className="text-xs text-white font-semibold">Bu yayınları ücretsiz izliyorsun!</p>
-              <p className="text-[10px] text-yellow-400/80 mt-0.5">Bize destek olmak için aşağıdaki reklama tıklar mısın? ✨</p>
-            </div>
-          </div>
+          <div className="flex items-center gap-3"><span className="text-2xl">🎁</span><div><p className="text-xs text-white font-semibold">Bu yayınları ücretsiz izliyorsun!</p><p className="text-[10px] text-yellow-400/80 mt-0.5">Bize destek olmak için aşağıdaki reklama tıklar mısın? ✨</p></div></div>
           <FiHeart className="w-5 h-5 text-red-400 animate-pulse flex-shrink-0" />
         </div>
         <div className="p-3 flex justify-center bg-[#111]" ref={adRef1} />
@@ -460,26 +403,20 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
       {/* REKLAM 2 */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="px-4 py-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-gray-700/30">
-          <p className="text-[11px] text-white font-medium text-center">📢 Reklam</p>
-        </div>
+        <div className="px-4 py-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-gray-700/30"><p className="text-[11px] text-white font-medium text-center">📢 Reklam</p></div>
         <div className="p-3 flex justify-center bg-[#111]" ref={adRef2} />
       </div>
 
       {/* SOHBET */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-3 py-2 flex items-center justify-between bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-b border-gray-700/30">
-          <div className="flex items-center gap-2">
-            <p className="text-[11px] text-white font-medium">💬 Kanal Sohbeti</p>
-            {isAdmin && <span className="text-[9px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">ADMIN</span>}
-          </div>
+          <div className="flex items-center gap-2"><p className="text-[11px] text-white font-medium">💬 Kanal Sohbeti</p>{isAdmin && <span className="text-[9px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">ADMIN</span>}</div>
           <div className="flex items-center gap-2">
             {!isAdmin && <button onClick={() => setShowAdminLogin(true)} className="text-[10px] text-gray-500 hover:text-white"><FiShield className="w-3 h-3" /></button>}
             {isAdmin && <button onClick={() => setIsAdmin(false)} className="text-[10px] text-red-400 hover:text-red-300">Çık</button>}
             <button onClick={() => setShowChat(!showChat)} className="text-[10px] text-gray-400 hover:text-white">{showChat ? 'Gizle' : 'Göster'}</button>
           </div>
         </div>
-
         {showChat && (
           <>
             <div ref={chatRef} className="h-40 sm:h-48 overflow-y-auto p-2 sm:p-3 space-y-1.5 bg-[#111]">
@@ -494,48 +431,28 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
                 </div>
               ))}
             </div>
-
             <div className="p-2 bg-[#0f0f0f] border-t border-gray-700/30">
               {!nickSet ? (
-                <div className="flex items-center gap-2">
-                  <FiUser className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                  <input type="text" value={nick} onChange={(e) => setNick(e.target.value.slice(0, 15))} onKeyDown={handleKeyDown} placeholder="Nick belirle..." className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" maxLength={15} />
-                  <button onClick={saveNick} className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 rounded-lg text-xs font-medium">Kaydet</button>
-                </div>
+                <div className="flex items-center gap-2"><FiUser className="w-4 h-4 text-gray-500 flex-shrink-0" /><input type="text" value={nick} onChange={(e) => setNick(e.target.value.slice(0, 15))} onKeyDown={handleKeyDown} placeholder="Nick belirle..." className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" maxLength={15} /><button onClick={saveNick} className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 rounded-lg text-xs font-medium">Kaydet</button></div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <input type="text" value={chatText} onChange={(e) => setChatText(e.target.value)} onKeyDown={handleKeyDown} placeholder="Mesaj yaz..." className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" maxLength={200} />
-                  <button onClick={sendMessage} disabled={!chatText.trim()} className="p-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-30 rounded-lg"><FiSend className="w-3.5 h-3.5" /></button>
-                </div>
+                <div className="flex items-center gap-2"><input type="text" value={chatText} onChange={(e) => setChatText(e.target.value)} onKeyDown={handleKeyDown} placeholder="Mesaj yaz..." className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" maxLength={200} /><button onClick={sendMessage} disabled={!chatText.trim()} className="p-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-30 rounded-lg"><FiSend className="w-3.5 h-3.5" /></button></div>
               )}
             </div>
           </>
         )}
       </div>
 
-      {/* ADMIN LOGIN MODAL */}
       {showAdminLogin && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}>
           <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-5 w-full max-w-xs" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold flex items-center gap-2"><FiShield className="text-red-400" /> Admin Girişi</h3><button onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}><FiX className="w-4 h-4" /></button></div>
-            <div className="flex justify-center space-x-2 mb-3">
-              {[0,1,2,3].map(i => (<div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>{i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}</div>))}
-            </div>
+            <div className="flex justify-center space-x-2 mb-3">{['0142', '0142', '0142', '0142'].map((_, i) => (<div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>{i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}</div>))}</div>
             {adminPinError && <p className="text-red-400 text-xs text-center mb-3">{adminPinError}</p>}
             <div className="space-y-2">
               {[['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']].map((row, i) => (
                 <div key={i} className="flex justify-center space-x-2">
                   {row.map((num, j) => num ? (
-                    <button key={j} onClick={() => {
-                      if (num === '⌫') { setAdminPin(p => p.slice(0, -1)); setAdminPinError(''); }
-                      else if (adminPin.length < 4) {
-                        const np = adminPin + num; setAdminPin(np); setAdminPinError('');
-                        if (np.length === 4) {
-                          if (np === '0142') { setIsAdmin(true); setShowAdminLogin(false); setAdminPin(''); }
-                          else { setAdminPinError('Hatalı PIN!'); setAdminPin(''); }
-                        }
-                      }
-                    }} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-base font-semibold">{num === '⌫' ? '✕' : num}</button>
+                    <button key={j} onClick={() => { if (num === '⌫') { setAdminPin(p => p.slice(0, -1)); setAdminPinError(''); } else if (adminPin.length < 4) { const np = adminPin + num; setAdminPin(np); setAdminPinError(''); if (np.length === 4) { if (np === '0142') { setIsAdmin(true); setShowAdminLogin(false); setAdminPin(''); } else { setAdminPinError('Hatalı PIN!'); setAdminPin(''); } } } }} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 rounded-xl text-base font-semibold">{num === '⌫' ? '✕' : num}</button>
                   ) : <div key={j} className="w-12 h-12" />)}
                 </div>
               ))}
