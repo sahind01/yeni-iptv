@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
 import VidPlayer from '@/components/Player/VidPlayer';
 import { useStore } from '@/store/useStore';
-import { FiFilm, FiChevronRight, FiFolder } from 'react-icons/fi';
+import { FiFilm, FiChevronRight, FiSearch, FiX } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 
 interface MovieItem {
@@ -26,10 +26,10 @@ export default function MoviesPage() {
   const [error, setError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<FilmCategory | null>(null);
   const [selectedMovie, setSelectedMovie] = useState<MovieItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const { setCurrentChannel } = useStore();
 
   useEffect(() => {
-    // Kategorileri .env'den al
     const catsStr = process.env.NEXT_PUBLIC_FILM_KATEGORILER;
     if (catsStr) {
       const cats = catsStr.split(',').map(c => {
@@ -73,6 +73,7 @@ export default function MoviesPage() {
 
   const handleCategoryClick = (cat: FilmCategory) => {
     setSelectedCategory(cat);
+    setSearchQuery('');
     fetchMovies(cat.url);
   };
 
@@ -82,7 +83,11 @@ export default function MoviesPage() {
   };
 
   const handleBack = () => { setSelectedMovie(null); setCurrentChannel(null); };
-  const handleBackToCategories = () => { setSelectedCategory(null); setMovies([]); };
+  const handleBackToCategories = () => { setSelectedCategory(null); setMovies([]); setSearchQuery(''); };
+
+  const filteredMovies = searchQuery.trim()
+    ? movies.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : movies;
 
   if (selectedMovie) {
     return (
@@ -97,11 +102,11 @@ export default function MoviesPage() {
 
   return (
     <MainLayout>
-      <div className="p-3 sm:p-4 lg:p-6">
+      <div className="p-3 sm:p-4 lg:p-6 max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-bold flex items-center gap-2"><FiFilm className="text-blue-400" /> Filmler</h1>
-            <p className="text-xs text-gray-400">
+            <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2"><FiFilm className="text-blue-400" /> Filmler</h1>
+            <p className="text-[10px] sm:text-xs text-gray-400">
               {selectedCategory ? `${movies.length} film` : `${categories.length} kategori`}
             </p>
           </div>
@@ -117,44 +122,70 @@ export default function MoviesPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
                 onClick={() => handleCategoryClick(cat)}
-                className="w-full p-4 rounded-xl border border-gray-700 bg-[#1a1a1a] hover:bg-[#222] cursor-pointer transition-all flex items-center justify-between"
+                className="w-full p-4 rounded-xl border border-gray-700 bg-[#1a1a1a] hover:bg-[#222] cursor-pointer transition-all flex items-center justify-between active:scale-[0.98]"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">🎬</span>
+                  <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-lg">🎬</span>
+                  </div>
                   <h3 className="text-sm font-semibold text-white">{cat.name}</h3>
                 </div>
-                <FiChevronRight className="w-5 h-5 text-gray-500" />
+                <FiChevronRight className="w-5 h-5 text-gray-500 flex-shrink-0" />
               </motion.button>
             ))}
           </div>
         ) : (
           /* FİLM LİSTESİ */
           <div>
-            <button onClick={handleBackToCategories} className="mb-4 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-all">
-              ← Kategorilere Dön
-            </button>
+            {/* ÜST BAR: GERİ + ARAMA */}
+            <div className="flex items-center gap-2 mb-3">
+              <button onClick={handleBackToCategories} className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg flex-shrink-0">
+                <span className="text-sm">←</span>
+              </button>
+              <div className="relative flex-1">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Film ara..."
+                  className="w-full bg-[#1a1a1a] border border-gray-700 rounded-xl pl-9 pr-8 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-lg">
+                    <FiX className="w-4 h-4 text-gray-400" />
+                  </button>
+                )}
+              </div>
+            </div>
 
-            <p className="text-sm text-white font-medium mb-3">{selectedCategory.name} - {movies.length} film</p>
+            <p className="text-xs text-gray-400 mb-2">{selectedCategory.name} • {filteredMovies.length} film</p>
 
             {isLoading && (
               <div className="flex justify-center py-10"><div className="w-8 h-8 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>
             )}
 
-            {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl mb-4"><p className="text-red-400 text-sm">{error}</p></div>}
+            {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl mb-3"><p className="text-red-400 text-xs">{error}</p></div>}
+
+            {!isLoading && !error && filteredMovies.length === 0 && (
+              <div className="text-center py-10">
+                <p className="text-gray-500 text-sm">Film bulunamadı</p>
+              </div>
+            )}
 
             {!isLoading && !error && (
               <div className="space-y-1">
-                {movies.map((movie, index) => (
+                {filteredMovies.map((movie, index) => (
                   <motion.div
                     key={movie.id}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.005 }}
-                    className="flex items-center space-x-3 p-3 bg-[#1a1a1a] rounded-xl cursor-pointer hover:bg-[#252525] border border-gray-800/30 transition-all"
+                    className="flex items-center space-x-3 p-3 bg-[#1a1a1a] rounded-xl cursor-pointer hover:bg-[#252525] border border-gray-800/30 active:scale-[0.99] transition-all"
                     onClick={() => handleMovieSelect(movie)}
                   >
                     <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-sm font-bold text-blue-400">{index + 1}</span>
+                      <span className="text-xs font-bold text-blue-400">{index + 1}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-medium text-white truncate">{movie.name}</h3>
