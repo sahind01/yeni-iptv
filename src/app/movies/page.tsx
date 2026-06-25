@@ -40,7 +40,6 @@ export default function MoviesPage() {
       setIsLoading(true); setError('');
       setLoadingProgress(10);
 
-      // Önce cache'e bak
       const cached = sessionStorage.getItem('mutlu_movies_cache');
       const cacheTime = sessionStorage.getItem('mutlu_movies_cache_time');
       
@@ -52,7 +51,9 @@ export default function MoviesPage() {
       }
 
       setLoadingProgress(30);
-      const res = await fetch('https://m3u.work/NliMw2dI.m3u', { cache: 'no-store' });
+      const m3uUrl = process.env.NEXT_PUBLIC_MOVIES_M3U;
+      if (!m3uUrl) throw new Error('M3U linki bulunamadı');
+      const res = await fetch(m3uUrl, { cache: 'no-store' });
       setLoadingProgress(60);
       
       if (!res.ok) throw new Error('Liste alınamadı');
@@ -62,7 +63,6 @@ export default function MoviesPage() {
       const parsed = parseM3U(text);
       setLoadingProgress(95);
       
-      // Cache'e kaydet
       sessionStorage.setItem('mutlu_movies_cache', JSON.stringify(parsed));
       sessionStorage.setItem('mutlu_movies_cache_time', Date.now().toString());
       
