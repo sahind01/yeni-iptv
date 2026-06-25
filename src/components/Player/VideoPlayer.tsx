@@ -20,7 +20,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
   const adRef1 = useRef<HTMLDivElement>(null);
-  const adRef2 = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const { currentChannel } = useStore();
 
@@ -65,6 +64,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [messages]);
 
+  // Banner Reklam
   useEffect(() => {
     if (adRef1.current) {
       adRef1.current.innerHTML = '';
@@ -76,17 +76,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  useEffect(() => {
-    if (adRef2.current) {
-      adRef2.current.innerHTML = '';
-      const script = document.createElement('script');
-      script.src = 'https://pl29874256.effectivecpmnetwork.com/26/94/89/2694899d45f560d6e4f25079f8b48cdc.js';
-      script.async = true;
-      adRef2.current.appendChild(script);
-    }
-  }, [currentChannel?.url]);
-
-  // EXO PLAYER TARZI - HLS.js ile
+  // PLAYER
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
@@ -94,12 +84,10 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const url = currentChannel.url;
     setPlayerState(prev => ({ ...prev, error: null }));
 
-    // Önce temizle
     video.pause();
     video.removeAttribute('src');
     video.load();
 
-    // HLS.js yükle ve oynat
     const initPlayer = async () => {
       try {
         const Hls = (await import('hls.js')).default;
@@ -130,9 +118,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           });
 
           hls.on(Hls.Events.ERROR, (event, data) => {
-            console.error('HLS Error:', data.type, data.details);
             if (data.fatal) {
-              // HLS başarısız, direkt video dene
               video.src = url;
               video.load();
               video.play().catch(() => {});
@@ -144,18 +130,15 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           });
 
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          // Safari native HLS
           video.src = url;
           video.load();
           video.play().catch(() => {});
         } else {
-          // Direkt video
           video.src = url;
           video.load();
           video.play().catch(() => {});
         }
       } catch (err) {
-        // HLS.js yüklenemedi, direkt dene
         video.src = url;
         video.load();
         video.play().catch(() => {
@@ -184,7 +167,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const onVolume = () => { if (video) setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted })); };
     const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
     const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
-    const onWaiting = () => {}; // Boş, loading göstermiyoruz
 
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -193,7 +175,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     video.addEventListener('volumechange', onVolume);
     video.addEventListener('error', onError);
     video.addEventListener('canplay', onCanPlay);
-    video.addEventListener('waiting', onWaiting);
 
     return () => {
       video.removeEventListener('play', onPlay);
@@ -203,7 +184,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       video.removeEventListener('volumechange', onVolume);
       video.removeEventListener('error', onError);
       video.removeEventListener('canplay', onCanPlay);
-      video.removeEventListener('waiting', onWaiting);
     };
   }, []);
 
@@ -227,14 +207,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     };
   }, []);
 
-  const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (playerState.isPlaying) { video.pause(); }
-    else { video.play().catch(() => {}); }
-    resetControlsTimer();
-  };
-
+  const togglePlay = () => { if (videoRef.current) { playerState.isPlaying ? videoRef.current.pause() : videoRef.current.play().catch(() => {}); resetControlsTimer(); } };
   const toggleMute = () => { if (videoRef.current) { videoRef.current.muted = !playerState.isMuted; resetControlsTimer(); } };
   const toggleFullscreen = () => { document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen(); resetControlsTimer(); };
   const skipTime = (s: number) => { if (videoRef.current && videoRef.current.duration) { videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration, videoRef.current.currentTime + s)); resetControlsTimer(); } };
@@ -285,9 +258,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     await remove(ref(db, `chats/${channelId}/${msgId}`));
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { if (!nickSet) saveNick(); else sendMessage(); }
-  };
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') { if (!nickSet) saveNick(); else sendMessage(); } };
 
   const handleShare = () => {
     if (navigator.share) {
@@ -304,6 +275,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="space-y-2">
+      {/* PLAYER */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
         <video ref={videoRef} className="w-full h-full object-contain" playsInline />
 
@@ -343,6 +315,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
+      {/* BANNER REKLAM */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-red-500/10 border-b border-gray-700/30">
           <div className="flex items-center gap-3"><span className="text-2xl">🎁</span><div><p className="text-xs text-white font-semibold">Bu yayınları ücretsiz izliyorsun!</p><p className="text-[10px] text-yellow-400/80 mt-0.5">Bize destek olmak için aşağıdaki reklama tıklar mısın? ✨</p></div></div>
@@ -351,11 +324,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         <div className="p-3 flex justify-center bg-[#111]" ref={adRef1} />
       </div>
 
-      <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="px-4 py-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-gray-700/30"><p className="text-[11px] text-white font-medium text-center">📢 Reklam</p></div>
-        <div className="p-3 flex justify-center bg-[#111]" ref={adRef2} />
-      </div>
-
+      {/* SOHBET */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-3 py-2 flex items-center justify-between bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-b border-gray-700/30">
           <div className="flex items-center gap-2"><p className="text-[11px] text-white font-medium">💬 Kanal Sohbeti</p>{isAdmin && <span className="text-[9px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">ADMIN</span>}</div>
