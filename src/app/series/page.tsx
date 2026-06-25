@@ -39,7 +39,9 @@ export default function SeriesPage() {
   const fetchSeries = async () => {
     try {
       setIsLoading(true); setError('');
-      const res = await fetch('https://m3u.ch/pl/03664cc59ee4eac89483715db404d9f0_0d5bec11282cce0532a95a62a4bb056f.m3u', { cache: 'no-store' });
+      const m3uUrl = process.env.NEXT_PUBLIC_SERIES_M3U;
+      if (!m3uUrl) throw new Error('M3U linki bulunamadı');
+      const res = await fetch(m3uUrl, { cache: 'no-store' });
       if (!res.ok) throw new Error('Liste alınamadı');
       const text = await res.text();
       const parsed = parseAndGroupM3U(text);
