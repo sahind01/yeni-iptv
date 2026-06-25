@@ -29,7 +29,7 @@ export default function LiveTVPage() {
   } = store;
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(true);
   const [showPlayer, setShowPlayer] = useState(false);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
@@ -38,16 +38,13 @@ export default function LiveTVPage() {
   const [showCategories, setShowCategories] = useState(false);
 
   useEffect(() => {
-    // IPTV kategorilerini oluştur
     const cats: IPTVCategory[] = [];
     
-    // 1. IPTV her zaman NEXT_PUBLIC_M3U_API_URL'den
     const apiUrl = process.env.NEXT_PUBLIC_M3U_API_URL;
     if (apiUrl) {
       cats.push({ name: 'IPTV 1', url: apiUrl });
     }
     
-    // Diğer IPTV'leri .env'den ekle
     const extraCats = process.env.NEXT_PUBLIC_IPTV_KATEGORILER;
     if (extraCats) {
       extraCats.split(',').forEach(c => {
@@ -58,13 +55,14 @@ export default function LiveTVPage() {
     
     setIptvCategories(cats);
     
-    // 2'den fazla kategori varsa seçim ekranını göster, yoksa direkt 1. IPTV'yi yükle
-    if (cats.length > 1) {
-      setShowCategories(true);
-    } else if (cats.length === 1) {
-      setSelectedIPTV(cats[0]);
+    // Tek kategori varsa direkt yükle, çoksa seçim ekranı göster
+    if (cats.length === 1) {
+      // Tek IPTV - direkt yükle
       fetchChannels(cats[0].url);
+    } else if (cats.length > 1) {
+      setShowCategories(true);
     } else {
+      // Hiç kategori yoksa eski sistem
       fetchChannelsFromAPI();
     }
     
@@ -90,7 +88,17 @@ export default function LiveTVPage() {
   const fetchChannels = async (url: string) => {
     try {
       setIsLoadingChannels(true); setError('');
-      const response = await fetch(url, { cache: 'no-store' });
+      
+      // Eğer URL NEXT_PUBLIC_M3U_API_URL ise kullanıcı adı şifre ekle
+      let finalUrl = url;
+      if (url === process.env.NEXT_PUBLIC_M3U_API_URL) {
+        const user = username || useStore.getState().username;
+        const pass = password || useStore.getState().password;
+        if (!user || !pass) { setError('Kullanıcı bilgisi eksik'); setIsLoadingChannels(false); return; }
+        finalUrl = `${url}?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+      }
+      
+      const response = await fetch(finalUrl, { cache: 'no-store' });
       if (!response.ok) throw new Error('Liste alınamadı');
       const text = await response.text();
       const parsed = M3UParser.getInstance().parse(text);
@@ -169,13 +177,11 @@ export default function LiveTVPage() {
     );
   }
 
-  // IPTV KATEGORİ SEÇİM EKRANI
   if (showCategories && iptvCategories.length > 1) {
     return (
       <MainLayout>
         <div className="p-4">
           <h1 className="text-lg font-bold text-white mb-4 flex items-center gap-2">📺 IPTV Kanalları</h1>
-          <p className="text-xs text-gray-400 mb-4">{iptvCategories.length} IPTV listesi mevcut</p>
           <div className="grid grid-cols-2 gap-2">
             {iptvCategories.map((cat, index) => (
               <motion.button
@@ -196,7 +202,6 @@ export default function LiveTVPage() {
     );
   }
 
-  // NORMAL KANAL LİSTESİ
   return (
     <MainLayout>
       <div className="space-y-2">
