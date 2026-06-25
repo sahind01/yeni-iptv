@@ -21,6 +21,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
+  const retryCount = useRef(0);
   const adRef1 = useRef<HTMLDivElement>(null);
   const adRef2 = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [messages]);
 
-  // REKLAM 1
   useEffect(() => {
     if (adRef1.current) {
       adRef1.current.innerHTML = '';
@@ -79,7 +79,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  // REKLAM 2
   useEffect(() => {
     if (adRef2.current) {
       adRef2.current.innerHTML = '';
@@ -90,41 +89,185 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
+  // TÜM FORMATLARI DESTEKLEYEN PLAYER
   useEffect(() => {
-    const video = videoRef.current; if (!video || !currentChannel?.url) return;
-    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+    const video = videoRef.current;
+    if (!video || !currentChannel?.url) return;
+
+    // Önceki player'ı temizle
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    retryCount.current = 0;
+    setPlayerState(prev => ({ ...prev, error: null }));
+
     const url = currentChannel.url;
-    const isLiveStream = url.includes('.m3u8') && (url.includes('live') || url.includes('stream') || url.includes('tv') || url.includes('channel'));
+    const urlLower = url.toLowerCase();
+
+    // Canlı yayın mı?
+    const isLiveStream = urlLower.includes('.m3u8') && 
+      (urlLower.includes('live') || urlLower.includes('stream') || 
+       urlLower.includes('tv') || urlLower.includes('channel'));
     setPlayerState(prev => ({ ...prev, isLive: isLiveStream }));
-    if (url.includes('.m3u8') && Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true, maxBufferLength: 30 });
-      hlsRef.current = hls; hls.loadSource(url); hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); setPlayerState(prev => ({ ...prev, error: null })); });
-      hls.on(Hls.Events.ERROR, () => { video.src = url; video.load(); video.play().catch(() => {}); });
-    } else { video.src = url; video.load(); video.play().catch(() => { setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' })); }); }
-    return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
+
+    // HLS (.m3u8) - Hls.js ile
+    if (urlLower.includes('.m3u8') && Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        maxBufferLength: 30,
+        manifestLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingTimeOut: 15000,
+        fragLoadingTimeOut: 20000,
+      });
+
+      hlsRef.current = hls;
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+        setPlayerState(prev => ({ ...prev, error: null }));
+        retryCount.current = 0;
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              if (retryCount.current < 3) {
+                retryCount.current++;
+                setPlayerState(prev => ({ ...prev, error: `Bağlantı hatası, yeniden deneniyor (${retryCount.current}/3)...` }));
+                setTimeout(() => {
+                  if (hlsRef.current) {
+                    hlsRef.current.loadSource(url);
+                  }
+                }, 2000 * retryCount.current);
+              } else {
+                // HLS başarısız, native video ile dene
+                tryNativePlayback();
+              }
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              tryNativePlayback();
+              break;
+          }
+        }
+      });
+    } 
+    // Native playback (MP4, TS, MKV, WebM, OGG, vb.)
+    else {
+      tryNativePlayback();
+    }
+
+    function tryNativePlayback() {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+
+      video.src = url;
+      video.load();
+
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setPlayerState(prev => ({ ...prev, error: null, isPlaying: true }));
+            retryCount.current = 0;
+          })
+          .catch((err) => {
+            console.log('Native play hatası:', err.message);
+            // Kullanıcı etkileşimi gerekiyorsa sessizce bekle
+            if (err.name === 'NotAllowedError') {
+              setPlayerState(prev => ({ ...prev, error: 'Oynatmak için ekrana tıklayın' }));
+            } else {
+              retryFallback();
+            }
+          });
+      }
+    }
+
+    function retryFallback() {
+      if (retryCount.current < 2) {
+        retryCount.current++;
+        setPlayerState(prev => ({ ...prev, error: `Yayın yükleniyor (${retryCount.current}/2)...` }));
+        setTimeout(() => {
+          if (video) {
+            video.src = url;
+            video.load();
+            video.play().catch(() => {
+              setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+            });
+          }
+        }, 2000 * retryCount.current);
+      } else {
+        setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+      }
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
   }, [currentChannel?.url]);
 
+  // Video olayları
   useEffect(() => {
-    const video = videoRef.current; if (!video) return;
+    const video = videoRef.current;
+    if (!video) return;
+
     const onPlay = () => setPlayerState(prev => ({ ...prev, isPlaying: true, error: null }));
     const onPause = () => setPlayerState(prev => ({ ...prev, isPlaying: false }));
     const onTimeUpdate = () => setPlayerState(prev => ({ ...prev, currentTime: video.currentTime }));
     const onDuration = () => setPlayerState(prev => ({ ...prev, duration: video.duration }));
     const onVolume = () => setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
-    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-    const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
-    video.addEventListener('play', onPlay); video.addEventListener('pause', onPause);
-    video.addEventListener('timeupdate', onTimeUpdate); video.addEventListener('durationchange', onDuration);
-    video.addEventListener('volumechange', onVolume); video.addEventListener('error', onError);
-    video.addEventListener('canplay', onCanPlay);
-    return () => {
-      video.removeEventListener('play', onPlay); video.removeEventListener('pause', onPause);
-      video.removeEventListener('timeupdate', onTimeUpdate); video.removeEventListener('durationchange', onDuration);
-      video.removeEventListener('volumechange', onVolume); video.removeEventListener('error', onError);
-      video.removeEventListener('canplay', onCanPlay);
+    const onError = () => {
+      // Native error - otomatik tekrar dene
+      if (retryCount.current < 2 && currentChannel?.url) {
+        retryCount.current++;
+        setTimeout(() => {
+          video.src = currentChannel.url;
+          video.load();
+          video.play().catch(() => {});
+        }, 2000);
+      } else {
+        setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+      }
     };
-  }, []);
+    const onCanPlay = () => {
+      setPlayerState(prev => ({ ...prev, error: null }));
+      retryCount.current = 0;
+    };
+    const onLoadedData = () => setPlayerState(prev => ({ ...prev, error: null }));
+
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('durationchange', onDuration);
+    video.addEventListener('volumechange', onVolume);
+    video.addEventListener('error', onError);
+    video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('loadeddata', onLoadedData);
+
+    return () => {
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('durationchange', onDuration);
+      video.removeEventListener('volumechange', onVolume);
+      video.removeEventListener('error', onError);
+      video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('loadeddata', onLoadedData);
+    };
+  }, [currentChannel?.url]);
 
   const resetControlsTimer = () => {
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
@@ -139,7 +282,17 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     return () => { container.removeEventListener('mousemove', show); container.removeEventListener('touchstart', show); container.removeEventListener('click', show); };
   }, []);
 
-  const togglePlay = () => { if (videoRef.current) { videoRef.current[playerState.isPlaying ? 'pause' : 'play'](); resetControlsTimer(); } };
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (playerState.isPlaying) {
+      video.pause();
+    } else {
+      video.play().catch(() => setPlayerState(prev => ({ ...prev, error: 'Oynatmak için tıklayın' })));
+    }
+    resetControlsTimer();
+  };
+
   const toggleMute = () => { if (videoRef.current) { videoRef.current.muted = !playerState.isMuted; resetControlsTimer(); } };
   const toggleFullscreen = () => { document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen(); resetControlsTimer(); };
   const skipTime = (s: number) => { if (videoRef.current) { videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + s)); resetControlsTimer(); } };
@@ -198,7 +351,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     if (navigator.share) {
       navigator.share({
         title: currentChannel?.name || 'Mutlu Player',
-        text: `📺 ${currentChannel?.name} kanalını izliyorum! Sen de katıl! 🎉\n👉 ${window.location.href}`,
+        text: `📺 ${currentChannel?.name} kanalını izliyorum! Sen de katıl! 🎉`,
         url: window.location.href,
       }).catch(() => {
         navigator.clipboard.writeText(window.location.href);
@@ -222,14 +375,41 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     <div className="space-y-2">
       {/* PLAYER */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay />
+        <video 
+          ref={videoRef} 
+          className="w-full h-full object-contain" 
+          playsInline 
+          autoPlay 
+          muted={false}
+          preload="auto"
+          crossOrigin="anonymous"
+          x5-video-player-type="h5"
+          x5-video-orientation="landscape"
+          x5-playsinline=""
+          webkit-playsinline=""
+        />
         {playerState.error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
-            <div className="text-center"><p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
-              <button onClick={() => { if (videoRef.current) { videoRef.current.load(); videoRef.current.play().catch(() => {}); } }} className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm">Tekrar Dene</button></div>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center">
+              <p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
+              <button 
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  retryCount.current = 0;
+                  if (videoRef.current) { 
+                    videoRef.current.src = currentChannel.url;
+                    videoRef.current.load(); 
+                    videoRef.current.play().catch(() => {}); 
+                  }
+                }} 
+                className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm"
+              >
+                Tekrar Dene
+              </button>
+            </div>
           </div>
         )}
-        
+
         <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
           {onBack ? (
             <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button>
