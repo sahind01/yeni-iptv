@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { FiShield, FiSmartphone, FiLock, FiStar, FiSend, FiCheck, FiMessageSquare, FiX, FiTv, FiSearch } from 'react-icons/fi';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FiShield, FiSmartphone, FiLock, FiStar, FiSend, FiCheck, FiMessageSquare, FiX, FiTv, FiSearch, FiBell } from 'react-icons/fi';
 import MainLayout from '@/components/Layout/MainLayout';
 import { useStore } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,25 @@ interface TVProgramme {
   start: string;
   stop: string;
 }
+
+// ==================== DUYURU AYARLARI - BAŞLANGIÇ ====================
+const duyurular = [
+  {
+    baslik: '🎬 Filmler Eklendi',
+    altYazi: '2 yeni film kategorisi eklendi. Hemen göz atın!',
+    renk: 'from-blue-500/20 to-cyan-500/20',
+    border: 'border-blue-500/30',
+    icon: '🎬',
+  },
+  {
+    baslik: '⚽ Süper Lig Heyecanı',
+    altYazi: 'Bu akşam derbi maçı var, kaçırmayın!',
+    renk: 'from-green-500/20 to-emerald-500/20',
+    border: 'border-green-500/30',
+    icon: '⚽',
+  },
+];
+// ==================== DUYURU AYARLARI - BİTİŞ ====================
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -31,7 +50,7 @@ export default function DashboardPage() {
   const [formSending, setFormSending] = useState(false);
   const [formSent, setFormSent] = useState(false);
   const [formError, setFormError] = useState('');
-  const adRef = useRef<HTMLDivElement>(null);
+  const [currentDuyuru, setCurrentDuyuru] = useState(0);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -39,16 +58,12 @@ export default function DashboardPage() {
     else if (hour < 12) setGreeting('Günaydın');
     else if (hour < 18) setGreeting('İyi Günler');
     else setGreeting('İyi Akşamlar');
-  }, []);
 
-  // Dashboard reklamı
-  useEffect(() => {
-    if (adRef.current) {
-      adRef.current.innerHTML = '';
-      const script = document.createElement('script');
-      script.src = 'https://pl29874256.effectivecpmnetwork.com/26/94/89/2694899d45f560d6e4f25079f8b48cdc.js';
-      script.async = true;
-      adRef.current.appendChild(script);
+    if (duyurular.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentDuyuru(prev => (prev + 1) % duyurular.length);
+      }, 5000);
+      return () => clearInterval(interval);
     }
   }, []);
 
@@ -58,9 +73,7 @@ export default function DashboardPage() {
       const url = search ? `/api/epg?search=${encodeURIComponent(search)}` : '/api/epg';
       const res = await fetch(url);
       const data = await res.json();
-      if (data.success) {
-        setTvProgrammes(data.onAir);
-      }
+      if (data.success) setTvProgrammes(data.onAir);
     } catch (err) { console.error(err); }
     finally { setTvLoading(false); }
   };
@@ -96,11 +109,8 @@ export default function DashboardPage() {
   };
 
   const formatTime = (timeStr: string) => {
-    try {
-      const hour = timeStr.substring(8, 10);
-      const min = timeStr.substring(10, 12);
-      return `${hour}:${min}`;
-    } catch { return timeStr; }
+    try { return `${timeStr.substring(8, 10)}:${timeStr.substring(10, 12)}`; }
+    catch { return timeStr; }
   };
 
   return (
@@ -113,8 +123,41 @@ export default function DashboardPage() {
           <p className="text-gray-400 text-sm mt-1">Bugün ne izlemek istersin?</p>
         </motion.div>
 
-        {/* REKLAM */}
-        <div className="mb-3 p-2 bg-[#1a1a1a] border border-gray-700/50 rounded-xl flex justify-center" ref={adRef} />
+        {/* DUYURU BÖLÜMÜ */}
+        {duyurular.length > 0 && (
+          <div className="mb-4 relative overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentDuyuru}
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+                transition={{ duration: 0.3 }}
+                className={`rounded-xl border ${duyurular[currentDuyuru].border} bg-gradient-to-r ${duyurular[currentDuyuru].renk} p-4`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{duyurular[currentDuyuru].icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-white">{duyurular[currentDuyuru].baslik}</h3>
+                    <p className="text-[11px] text-gray-300 mt-0.5">{duyurular[currentDuyuru].altYazi}</p>
+                  </div>
+                  <FiBell className="w-5 h-5 text-white/50 flex-shrink-0" />
+                </div>
+              </motion.div>
+            </AnimatePresence>
+            {duyurular.length > 1 && (
+              <div className="flex justify-center gap-1.5 mt-2">
+                {duyurular.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentDuyuru(i)}
+                    className={`w-2 h-2 rounded-full transition-all ${i === currentDuyuru ? 'bg-blue-400 w-4' : 'bg-gray-600'}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* GÜNÜN MAÇLARI */}
         <div className="mb-3">
@@ -141,31 +184,23 @@ export default function DashboardPage() {
           </button>
           {showTV && (
             <div className="mt-2 p-4 rounded-xl border border-gray-700 bg-[#1a1a1a]">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white">📺 Şu An Yayında</h3>
-                <button onClick={() => { setShowTV(false); setTvSearch(''); }} className="text-gray-500 hover:text-white"><FiX className="w-4 h-4" /></button>
-              </div>
+              <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-white">📺 Şu An Yayında</h3><button onClick={() => { setShowTV(false); setTvSearch(''); }} className="text-gray-500 hover:text-white"><FiX className="w-4 h-4" /></button></div>
               <form onSubmit={handleSearch} className="relative mb-3">
                 <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-3.5 h-3.5" />
-                <input type="text" value={tvSearch} onChange={(e) => setTvSearch(e.target.value)}
-                  placeholder="Kanal veya program ara..."
-                  className="w-full bg-[#111] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+                <input type="text" value={tvSearch} onChange={(e) => setTvSearch(e.target.value)} placeholder="Kanal veya program ara..." className="w-full bg-[#111] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
               </form>
-              {tvLoading ? (
-                <div className="flex justify-center py-6"><div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>
-              ) : tvProgrammes.length === 0 ? (
-                <p className="text-gray-500 text-xs text-center py-4">Veri alınamadı</p>
-              ) : (
-                <div className="space-y-1 max-h-[400px] overflow-y-auto">
-                  <p className="text-[10px] text-gray-500 mb-2">{tvProgrammes.length} program bulundu</p>
-                  {tvProgrammes.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between p-2.5 bg-white/5 rounded-lg">
-                      <div className="flex-1 min-w-0"><p className="text-xs text-white font-medium truncate">{p.title}</p><p className="text-[10px] text-gray-500">{p.channel}</p></div>
-                      <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">{formatTime(p.start)} - {formatTime(p.stop)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {tvLoading ? <div className="flex justify-center py-6"><div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div> :
+                tvProgrammes.length === 0 ? <p className="text-gray-500 text-xs text-center py-4">Veri alınamadı</p> : (
+                  <div className="space-y-1 max-h-[400px] overflow-y-auto">
+                    <p className="text-[10px] text-gray-500 mb-2">{tvProgrammes.length} program bulundu</p>
+                    {tvProgrammes.map((p, i) => (
+                      <div key={i} className="flex items-center justify-between p-2.5 bg-white/5 rounded-lg">
+                        <div className="flex-1 min-w-0"><p className="text-xs text-white font-medium truncate">{p.title}</p><p className="text-[10px] text-gray-500">{p.channel}</p></div>
+                        <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">{formatTime(p.start)} - {formatTime(p.stop)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
             </div>
           )}
         </div>
