@@ -86,25 +86,85 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  // PLAYER - SAF HALİ
+  // EXO PLAYER TARZI - HLS.js ile
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
 
     const url = currentChannel.url;
+    setPlayerState(prev => ({ ...prev, error: null }));
 
+    // Önce temizle
     video.pause();
     video.removeAttribute('src');
     video.load();
-    video.src = url;
-    video.load();
 
-    const playPromise = video.play();
-    if (playPromise) {
-      playPromise.catch(() => {
-        setPlayerState(prev => ({ ...prev, error: 'Başlatmak için ▶️ butonuna tıklayın' }));
-      });
-    }
+    // HLS.js yükle ve oynat
+    const initPlayer = async () => {
+      try {
+        const Hls = (await import('hls.js')).default;
+        
+        if (Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+            maxBufferLength: 60,
+            maxMaxBufferLength: 300,
+            manifestLoadingTimeOut: 30000,
+            manifestLoadingMaxRetry: 6,
+            levelLoadingTimeOut: 30000,
+            fragLoadingTimeOut: 60000,
+            fragLoadingMaxRetry: 10,
+            startLevel: -1,
+            autoStartLoad: true,
+            progressive: true,
+          });
+
+          hls.loadSource(url);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play().catch(() => {
+              setPlayerState(prev => ({ ...prev, error: 'Başlatmak için tıklayın ▶️' }));
+            });
+          });
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            console.error('HLS Error:', data.type, data.details);
+            if (data.fatal) {
+              // HLS başarısız, direkt video dene
+              video.src = url;
+              video.load();
+              video.play().catch(() => {});
+            }
+          });
+
+          hls.on(Hls.Events.LEVEL_LOADED, () => {
+            setPlayerState(prev => ({ ...prev, error: null }));
+          });
+
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari native HLS
+          video.src = url;
+          video.load();
+          video.play().catch(() => {});
+        } else {
+          // Direkt video
+          video.src = url;
+          video.load();
+          video.play().catch(() => {});
+        }
+      } catch (err) {
+        // HLS.js yüklenemedi, direkt dene
+        video.src = url;
+        video.load();
+        video.play().catch(() => {
+          setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' }));
+        });
+      }
+    };
+
+    initPlayer();
 
     return () => {
       video.pause();
@@ -122,8 +182,9 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const onTimeUpdate = () => { if (video) setPlayerState(prev => ({ ...prev, currentTime: video.currentTime })); };
     const onDuration = () => { if (video) setPlayerState(prev => ({ ...prev, duration: video.duration })); };
     const onVolume = () => { if (video) setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted })); };
-    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı, tekrar deneyin' }));
+    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
     const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
+    const onWaiting = () => {}; // Boş, loading göstermiyoruz
 
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -132,6 +193,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     video.addEventListener('volumechange', onVolume);
     video.addEventListener('error', onError);
     video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('waiting', onWaiting);
 
     return () => {
       video.removeEventListener('play', onPlay);
@@ -141,6 +203,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       video.removeEventListener('volumechange', onVolume);
       video.removeEventListener('error', onError);
       video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('waiting', onWaiting);
     };
   }, []);
 
@@ -168,12 +231,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const video = videoRef.current;
     if (!video) return;
     if (playerState.isPlaying) { video.pause(); }
-    else { 
-      setPlayerState(prev => ({ ...prev, error: null }));
-      video.play().catch(() => {
-        setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı, tekrar deneyin' }));
-      }); 
-    }
+    else { video.play().catch(() => {}); }
     resetControlsTimer();
   };
 
@@ -247,16 +305,14 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   return (
     <div className="space-y-2">
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video ref={videoRef} className="w-full h-full object-contain" playsInline preload="auto" />
+        <video ref={videoRef} className="w-full h-full object-contain" playsInline />
 
         {!playerState.isPlaying && (
           <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={togglePlay}>
             <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
               <span className="text-3xl">{playerState.error ? '🔄' : '▶️'}</span>
             </div>
-            {playerState.error && (
-              <p className="absolute mt-24 text-gray-300 text-xs">{playerState.error}</p>
-            )}
+            {playerState.error && <p className="absolute mt-24 text-gray-300 text-xs">{playerState.error}</p>}
           </div>
         )}
 
