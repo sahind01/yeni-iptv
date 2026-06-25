@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Hls from 'hls.js';
 import { useStore } from '@/store/useStore';
 import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
@@ -19,9 +18,7 @@ const MAX_MESSAGES = 15;
 export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
-  const retryCount = useRef(0);
   const adRef1 = useRef<HTMLDivElement>(null);
   const adRef2 = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -30,6 +27,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const [playerState, setPlayerState] = useState({
     isPlaying: false, isMuted: false, volume: 1, currentTime: 0, duration: 0,
     quality: 'auto', error: null as string | null, showControls: true, isLive: true,
+    useHls: false,
   });
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -42,6 +40,16 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const [adminPin, setAdminPin] = useState('');
   const [adminPinError, setAdminPinError] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
+
+  // HLS.js dinamik import
+  const loadHls = async () => {
+    try {
+      const Hls = (await import('hls.js')).default;
+      return Hls;
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     const savedNick = localStorage.getItem('mutlu_chat_nick');
@@ -89,120 +97,74 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
+  // PLAYER - DÜZ VE BASİT
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
 
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    retryCount.current = 0;
-    setPlayerState(prev => ({ ...prev, error: null }));
-
     const url = currentChannel.url;
     const urlLower = url.toLowerCase();
-
-    const isLiveStream = urlLower.includes('.m3u8') &&
-      (urlLower.includes('live') || urlLower.includes('stream') ||
+    const isLiveStream = urlLower.includes('.m3u8') && 
+      (urlLower.includes('live') || urlLower.includes('stream') || 
        urlLower.includes('tv') || urlLower.includes('channel'));
-    setPlayerState(prev => ({ ...prev, isLive: isLiveStream }));
 
-    // Native fallback fonksiyonu
-    const tryNativePlayback = () => {
-      if (!video) return;
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
+    setPlayerState(prev => ({ ...prev, isLive: isLiveStream, error: null }));
+
+    // HLS mi?
+    if (urlLower.includes('.m3u8') && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
       video.src = url;
-      video.load();
-      video.play()
-        .then(() => {
-          setPlayerState(prev => ({ ...prev, error: null, isPlaying: true }));
-          retryCount.current = 0;
-        })
-        .catch((err: any) => {
-          if (err.name === 'NotAllowedError') {
-            setPlayerState(prev => ({ ...prev, error: 'Oynatmak için ekrana tıklayın' }));
-          } else {
-            retryFallback();
-          }
-        });
-    };
-
-    const retryFallback = () => {
-      if (!video) return;
-      if (retryCount.current < 2) {
-        retryCount.current++;
-        setPlayerState(prev => ({ ...prev, error: `Yayın yükleniyor (${retryCount.current}/2)...` }));
-        setTimeout(() => {
-          if (video) {
-            video.src = url;
-            video.load();
-            video.play().catch(() => {
-              setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-            });
-          }
-        }, 2000 * retryCount.current);
-      } else {
-        setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-      }
-    };
-
-    // HLS (.m3u8) - Hls.js ile
-    if (urlLower.includes('.m3u8') && Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        maxBufferLength: 30,
-        manifestLoadingTimeOut: 20000,
-        manifestLoadingMaxRetry: 4,
-        levelLoadingTimeOut: 15000,
-        fragLoadingTimeOut: 20000,
-      });
-
-      hlsRef.current = hls;
-      hls.loadSource(url);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
-        setPlayerState(prev => ({ ...prev, error: null }));
-        retryCount.current = 0;
-      });
-
-      hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              if (retryCount.current < 3) {
-                retryCount.current++;
-                setPlayerState(prev => ({ ...prev, error: `Bağlantı hatası (${retryCount.current}/3)...` }));
-                setTimeout(() => {
-                  if (hlsRef.current) hlsRef.current.loadSource(url);
-                }, 2000 * retryCount.current);
-              } else {
-                tryNativePlayback();
-              }
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              tryNativePlayback();
-              break;
-          }
+      setPlayerState(prev => ({ ...prev, useHls: false }));
+    } else if (urlLower.includes('.m3u8')) {
+      // Hls.js dene
+      setPlayerState(prev => ({ ...prev, useHls: true }));
+      loadHls().then(Hls => {
+        if (Hls && Hls.isSupported() && video) {
+          const hls = new Hls({
+            enableWorker: false,
+            maxBufferLength: 60,
+            manifestLoadingTimeOut: 30000,
+            fragLoadingTimeOut: 60000,
+            startLevel: -1,
+            autoStartLoad: true,
+          });
+          hls.loadSource(url);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play().catch(() => {});
+          });
+          hls.on(Hls.Events.ERROR, () => {
+            // Hls.js başarısız, direkt video dene
+            if (video) {
+              video.src = url;
+              video.load();
+              video.play().catch(() => {});
+            }
+          });
+        } else if (video) {
+          video.src = url;
         }
       });
     } else {
-      tryNativePlayback();
+      // MP4, TS, MKV vs direkt
+      video.src = url;
+      setPlayerState(prev => ({ ...prev, useHls: false }));
+    }
+
+    // Otomatik oynat
+    video.load();
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise.catch(() => {
+        setPlayerState(prev => ({ ...prev, error: 'Başlatmak için ortadaki butona tıklayın' }));
+      });
     }
 
     return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+      if (video) {
+        video.pause();
+        video.src = '';
+        video.load();
       }
     };
   }, [currentChannel?.url]);
@@ -213,23 +175,11 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
     const onPlay = () => setPlayerState(prev => ({ ...prev, isPlaying: true, error: null }));
     const onPause = () => setPlayerState(prev => ({ ...prev, isPlaying: false }));
-    const onTimeUpdate = () => setPlayerState(prev => ({ ...prev, currentTime: video.currentTime }));
-    const onDuration = () => setPlayerState(prev => ({ ...prev, duration: video.duration }));
-    const onVolume = () => setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
-    const onError = () => {
-      if (retryCount.current < 2 && currentChannel?.url && video) {
-        retryCount.current++;
-        setTimeout(() => {
-          video.src = currentChannel.url;
-          video.load();
-          video.play().catch(() => {});
-        }, 2000);
-      } else {
-        setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-      }
-    };
-    const onCanPlay = () => { setPlayerState(prev => ({ ...prev, error: null })); retryCount.current = 0; };
-    const onLoadedData = () => setPlayerState(prev => ({ ...prev, error: null }));
+    const onTimeUpdate = () => video && setPlayerState(prev => ({ ...prev, currentTime: video.currentTime }));
+    const onDuration = () => video && setPlayerState(prev => ({ ...prev, duration: video.duration }));
+    const onVolume = () => video && setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted }));
+    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+    const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
 
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -238,7 +188,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     video.addEventListener('volumechange', onVolume);
     video.addEventListener('error', onError);
     video.addEventListener('canplay', onCanPlay);
-    video.addEventListener('loadeddata', onLoadedData);
 
     return () => {
       video.removeEventListener('play', onPlay);
@@ -248,9 +197,8 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       video.removeEventListener('volumechange', onVolume);
       video.removeEventListener('error', onError);
       video.removeEventListener('canplay', onCanPlay);
-      video.removeEventListener('loadeddata', onLoadedData);
     };
-  }, [currentChannel?.url]);
+  }, []);
 
   const resetControlsTimer = () => {
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
@@ -259,10 +207,17 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   };
 
   useEffect(() => {
-    const container = containerRef.current; if (!container) return;
+    const container = containerRef.current;
+    if (!container) return;
     const show = () => resetControlsTimer();
-    container.addEventListener('mousemove', show); container.addEventListener('touchstart', show); container.addEventListener('click', show);
-    return () => { container.removeEventListener('mousemove', show); container.removeEventListener('touchstart', show); container.removeEventListener('click', show); };
+    container.addEventListener('mousemove', show);
+    container.addEventListener('touchstart', show);
+    container.addEventListener('click', show);
+    return () => {
+      container.removeEventListener('mousemove', show);
+      container.removeEventListener('touchstart', show);
+      container.removeEventListener('click', show);
+    };
   }, []);
 
   const togglePlay = () => {
@@ -271,7 +226,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     if (playerState.isPlaying) {
       video.pause();
     } else {
-      video.play().catch(() => setPlayerState(prev => ({ ...prev, error: 'Oynatmak için tıklayın' })));
+      video.play().catch(() => {});
     }
     resetControlsTimer();
   };
@@ -357,21 +312,38 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   return (
     <div className="space-y-2">
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay preload="auto" crossOrigin="anonymous" />
-        {playerState.error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20" onClick={(e) => e.stopPropagation()}>
-            <div className="text-center">
-              <p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
-              <button onClick={(e) => { e.stopPropagation(); retryCount.current = 0; if (videoRef.current) { videoRef.current.src = currentChannel.url; videoRef.current.load(); videoRef.current.play().catch(() => {}); } }} className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm">Tekrar Dene</button>
+        <video 
+          ref={videoRef} 
+          className="w-full h-full object-contain" 
+          playsInline 
+          controlsList="nodownload"
+        />
+        
+        {/* ORTADA PLAY BUTONU */}
+        {!playerState.isPlaying && !playerState.error && (
+          <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={togglePlay}>
+            <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
+              <span className="text-4xl">▶️</span>
             </div>
           </div>
         )}
+
+        {playerState.error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
+            <div className="text-center">
+              <p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
+              <button onClick={togglePlay} className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm">Tekrar Dene</button>
+            </div>
+          </div>
+        )}
+
         <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
           {onBack ? <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button> : <div />}
           <button onClick={(e) => { e.stopPropagation(); handleShare(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70 flex items-center gap-1.5">
             {shareCopied ? <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></> : <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>}
           </button>
         </div>
+
         <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pt-10 sm:pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           {!playerState.isLive && (
             <div className="mb-2 sm:mb-3"><div className="relative h-1.5 sm:h-2 bg-gray-600/50 rounded-full cursor-pointer" onClick={handleSeek}><div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }} /></div>
@@ -446,7 +418,9 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}>
           <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-5 w-full max-w-xs" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold flex items-center gap-2"><FiShield className="text-red-400" /> Admin Girişi</h3><button onClick={() => { setShowAdminLogin(false); setAdminPin(''); setAdminPinError(''); }}><FiX className="w-4 h-4" /></button></div>
-            <div className="flex justify-center space-x-2 mb-3">{['0142', '0142', '0142', '0142'].map((_, i) => (<div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>{i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}</div>))}</div>
+            <div className="flex justify-center space-x-2 mb-3">
+              {[0,1,2,3].map(i => (<div key={i} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${i < adminPin.length ? 'border-red-500 bg-red-500/20' : 'border-gray-600'}`}>{i < adminPin.length && <div className="w-2 h-2 bg-red-400 rounded-full" />}</div>))}
+            </div>
             {adminPinError && <p className="text-red-400 text-xs text-center mb-3">{adminPinError}</p>}
             <div className="space-y-2">
               {[['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']].map((row, i) => (
