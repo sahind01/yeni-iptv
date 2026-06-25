@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
-import VideoPlayer from '@/components/Player/VideoPlayer';
+import VideoPlayer from '@/components/Player/VodPlayer';
 import { useStore } from '@/store/useStore';
 import { FiFilm, FiSearch, FiX, FiGrid, FiList, FiPlay, FiLoader } from 'react-icons/fi';
 import { motion } from 'framer-motion';
