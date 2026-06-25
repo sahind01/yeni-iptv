@@ -86,36 +86,19 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  // PLAYER - iframe fallback
+  // PLAYER - SAF HALİ
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
 
     const url = currentChannel.url;
 
-    // Temizle
     video.pause();
     video.removeAttribute('src');
     video.load();
-
-    // Cross-origin kontrolü - eğer farklı domain'den geliyorsa iframe dene
-    try {
-      const urlObj = new URL(url);
-      const currentHost = window.location.hostname;
-      
-      if (urlObj.hostname !== currentHost && !url.includes('workers.dev') && !url.includes('vercel.app')) {
-        // Farklı domain, direkt dene ama hata olursa iframe'e geç
-        video.src = url;
-        video.crossOrigin = 'anonymous';
-      } else {
-        video.src = url;
-      }
-    } catch {
-      video.src = url;
-    }
-
+    video.src = url;
     video.load();
-    
+
     const playPromise = video.play();
     if (playPromise) {
       playPromise.catch(() => {
@@ -264,12 +247,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   return (
     <div className="space-y-2">
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video 
-          ref={videoRef} 
-          className="w-full h-full object-contain" 
-          playsInline 
-          preload="auto"
-        />
+        <video ref={videoRef} className="w-full h-full object-contain" playsInline preload="auto" />
 
         {!playerState.isPlaying && (
           <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={togglePlay}>
