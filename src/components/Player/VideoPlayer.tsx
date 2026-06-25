@@ -86,25 +86,46 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  // Video.js tarzı basit player
+  // PLAYER - iframe fallback
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
 
     const url = currentChannel.url;
-    video.src = url;
+
+    // Temizle
+    video.pause();
+    video.removeAttribute('src');
     video.load();
 
+    // Cross-origin kontrolü - eğer farklı domain'den geliyorsa iframe dene
+    try {
+      const urlObj = new URL(url);
+      const currentHost = window.location.hostname;
+      
+      if (urlObj.hostname !== currentHost && !url.includes('workers.dev') && !url.includes('vercel.app')) {
+        // Farklı domain, direkt dene ama hata olursa iframe'e geç
+        video.src = url;
+        video.crossOrigin = 'anonymous';
+      } else {
+        video.src = url;
+      }
+    } catch {
+      video.src = url;
+    }
+
+    video.load();
+    
     const playPromise = video.play();
     if (playPromise) {
       playPromise.catch(() => {
-        setPlayerState(prev => ({ ...prev, error: 'Başlatmak için dokunun ▶️' }));
+        setPlayerState(prev => ({ ...prev, error: 'Başlatmak için ▶️ butonuna tıklayın' }));
       });
     }
 
     return () => {
       video.pause();
-      video.src = '';
+      video.removeAttribute('src');
       video.load();
     };
   }, [currentChannel?.url]);
@@ -118,7 +139,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const onTimeUpdate = () => { if (video) setPlayerState(prev => ({ ...prev, currentTime: video.currentTime })); };
     const onDuration = () => { if (video) setPlayerState(prev => ({ ...prev, duration: video.duration })); };
     const onVolume = () => { if (video) setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted })); };
-    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı, tekrar deneyin' }));
     const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
 
     video.addEventListener('play', onPlay);
@@ -164,7 +185,12 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     const video = videoRef.current;
     if (!video) return;
     if (playerState.isPlaying) { video.pause(); }
-    else { video.play().catch(() => {}); }
+    else { 
+      setPlayerState(prev => ({ ...prev, error: null }));
+      video.play().catch(() => {
+        setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı, tekrar deneyin' }));
+      }); 
+    }
     resetControlsTimer();
   };
 
@@ -238,24 +264,21 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   return (
     <div className="space-y-2">
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video ref={videoRef} className="w-full h-full object-contain" playsInline preload="auto" disablePictureInPicture controlsList="nodownload noplaybackrate" />
+        <video 
+          ref={videoRef} 
+          className="w-full h-full object-contain" 
+          playsInline 
+          preload="auto"
+        />
 
-        {playerState.error && !playerState.isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20 cursor-pointer" onClick={togglePlay}>
-            <div className="text-center">
-              <p className="text-gray-300 text-sm mb-3">{playerState.error}</p>
-              <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center mx-auto hover:bg-white/30 transition-all">
-                <span className="text-3xl">▶️</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!playerState.isPlaying && !playerState.error && (
+        {!playerState.isPlaying && (
           <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={togglePlay}>
             <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
-              <span className="text-3xl">▶️</span>
+              <span className="text-3xl">{playerState.error ? '🔄' : '▶️'}</span>
             </div>
+            {playerState.error && (
+              <p className="absolute mt-24 text-gray-300 text-xs">{playerState.error}</p>
+            )}
           </div>
         )}
 
