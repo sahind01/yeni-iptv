@@ -6,7 +6,7 @@ import ChannelGrid from '@/components/Channel/ChannelGrid';
 import ChannelList from '@/components/Channel/ChannelList';
 import CategoryTabs from '@/components/UI/CategoryTabs';
 import SearchBar from '@/components/UI/SearchBar';
-import VideoPlayer from '@/components/Player/VidPlayer';
+import VideoPlayer from '@/components/Player/VideoPlayer';
 import EPGInfo from '@/components/Channel/EPGInfo';
 import { useStore } from '@/store/useStore';
 import { FirebaseService } from '@/services/firebase';
