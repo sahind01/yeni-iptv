@@ -108,7 +108,9 @@ export default function AdultPage() {
   const fetchChannels = async () => {
     try {
       setIsLoading(true); setError('');
-      const res = await fetch('https://raw.githubusercontent.com/caonimagfw/tv-box/ae3579019efafaccbc755f3aed5a1c55a4e88e53/eklins_fdtv/tv/xxx.m3u', { cache: 'no-store' });
+      const m3uUrl = process.env.NEXT_PUBLIC_ADULT_M3U;
+      if (!m3uUrl) throw new Error('M3U linki bulunamadı');
+      const res = await fetch(m3uUrl, { cache: 'no-store' });
       if (!res.ok) throw new Error('Liste alınamadı');
       const text = await res.text();
       const parsed = parseM3U(text);
