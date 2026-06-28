@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
+import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck, FiLoader } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
 import { db } from '@/services/firebase';
 
@@ -15,17 +15,26 @@ interface Message {
 
 const MAX_MESSAGES = 15;
 
+// CORS proxy listesi - sırayla dener
+const CORS_PROXIES = [
+  'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url=',
+  'https://cors-anywhere.herokuapp.com/',
+];
+
 export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimer = useRef<NodeJS.Timeout | null>(null);
   const adRef1 = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  const hlsInstanceRef = useRef<any>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { currentChannel } = useStore();
 
   const [playerState, setPlayerState] = useState({
     isPlaying: false, isMuted: false, volume: 1, currentTime: 0, duration: 0,
-    error: null as string | null, showControls: true, isLive: true,
+    error: null as string | null, showControls: true, isLive: true, isLoading: true,
   });
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -64,7 +73,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [messages]);
 
-  // Banner Reklam
   useEffect(() => {
     if (adRef1.current) {
       adRef1.current.innerHTML = '';
@@ -76,97 +84,133 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  // PLAYER
+  // ==================== YENİ PLAYER ====================
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentChannel?.url) return;
 
     const url = currentChannel.url;
-    setPlayerState(prev => ({ ...prev, error: null }));
+    
+    // Temizlik
+    cleanupPlayer();
+    setPlayerState(prev => ({ ...prev, error: null, isLoading: true }));
 
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
+    // URL'yi kontrol et
+    const urlLower = url.toLowerCase();
+    const isHLS = urlLower.includes('.m3u8');
+    const isDirectVideo = urlLower.includes('.mp4') || urlLower.includes('.ts') || 
+                          urlLower.includes('.mkv') || urlLower.includes('.webm') || 
+                          urlLower.includes('.avi') || urlLower.includes('.mov');
 
-    const initPlayer = async () => {
-      try {
-        const Hls = (await import('hls.js')).default;
-        
-        if (Hls.isSupported()) {
-          const hls = new Hls({
-            enableWorker: true,
-            lowLatencyMode: false,
-            maxBufferLength: 60,
-            maxMaxBufferLength: 300,
-            manifestLoadingTimeOut: 30000,
-            manifestLoadingMaxRetry: 6,
-            levelLoadingTimeOut: 30000,
-            fragLoadingTimeOut: 60000,
-            fragLoadingMaxRetry: 10,
-            startLevel: -1,
-            autoStartLoad: true,
-            progressive: true,
-          });
+    // Önce direkt dene, olmazsa proxy ile dene
+    tryDirectPlay(url, 0);
 
-          hls.loadSource(url);
-          hls.attachMedia(video);
+    function tryDirectPlay(playUrl: string, proxyIndex: number) {
+      if (!video) return;
 
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play().catch(() => {
-              setPlayerState(prev => ({ ...prev, error: 'Başlatmak için tıklayın ▶️' }));
+      // Önceki instance'ı temizle
+      cleanupPlayer();
+
+      if (isHLS) {
+        // HLS oynatma
+        import('hls.js').then(({ default: Hls }) => {
+          if (Hls.isSupported() && video) {
+            const hls = new Hls({
+              enableWorker: true,
+              lowLatencyMode: true,
+              maxBufferLength: 60,
+              manifestLoadingTimeOut: 20000,
+              manifestLoadingMaxRetry: 3,
+              fragLoadingTimeOut: 30000,
+              fragLoadingMaxRetry: 5,
+              startLevel: -1,
+              autoStartLoad: true,
             });
-          });
 
-          hls.on(Hls.Events.ERROR, (event, data) => {
-            if (data.fatal) {
-              video.src = url;
-              video.load();
+            hlsInstanceRef.current = hls;
+            hls.loadSource(playUrl);
+            hls.attachMedia(video);
+
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              setPlayerState(prev => ({ ...prev, isLoading: false, error: null }));
               video.play().catch(() => {});
-            }
-          });
+            });
 
-          hls.on(Hls.Events.LEVEL_LOADED, () => {
-            setPlayerState(prev => ({ ...prev, error: null }));
-          });
-
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = url;
-          video.load();
-          video.play().catch(() => {});
-        } else {
-          video.src = url;
-          video.load();
-          video.play().catch(() => {});
-        }
-      } catch (err) {
-        video.src = url;
-        video.load();
-        video.play().catch(() => {
-          setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' }));
+            hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
+              if (data.fatal) {
+                // HLS hatası - proxy dene
+                if (proxyIndex < CORS_PROXIES.length) {
+                  tryDirectPlay(CORS_PROXIES[proxyIndex] + encodeURIComponent(url), proxyIndex + 1);
+                } else {
+                  // Direkt video olarak dene
+                  tryDirectVideo(playUrl);
+                }
+              }
+            });
+          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = playUrl;
+            video.play().catch(() => tryDirectVideo(playUrl));
+          }
+        }).catch(() => {
+          tryDirectVideo(playUrl);
         });
+      } else {
+        tryDirectVideo(playUrl);
       }
-    };
+    }
 
-    initPlayer();
-
-    return () => {
-      video.pause();
-      video.removeAttribute('src');
+    function tryDirectVideo(playUrl: string) {
+      if (!video) return;
+      video.src = playUrl;
       video.load();
-    };
+      
+      video.play()
+        .then(() => {
+          setPlayerState(prev => ({ ...prev, isLoading: false, error: null }));
+        })
+        .catch(() => {
+          // Proxy ile dene
+          if (proxyIndex < CORS_PROXIES.length && !isDirectVideo) {
+            tryDirectPlay(CORS_PROXIES[proxyIndex] + encodeURIComponent(url), proxyIndex + 1);
+          } else {
+            setPlayerState(prev => ({ 
+              ...prev, 
+              isLoading: false, 
+              error: 'Yayın açılamadı. Tekrar deneyin.',
+            }));
+          }
+        });
+    }
+
+    function cleanupPlayer() {
+      if (hlsInstanceRef.current) {
+        hlsInstanceRef.current.destroy();
+        hlsInstanceRef.current = null;
+      }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    }
+
+    return () => cleanupPlayer();
   }, [currentChannel?.url]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const onPlay = () => setPlayerState(prev => ({ ...prev, isPlaying: true, error: null }));
+    const onPlay = () => setPlayerState(prev => ({ ...prev, isPlaying: true, error: null, isLoading: false }));
     const onPause = () => setPlayerState(prev => ({ ...prev, isPlaying: false }));
     const onTimeUpdate = () => { if (video) setPlayerState(prev => ({ ...prev, currentTime: video.currentTime })); };
     const onDuration = () => { if (video) setPlayerState(prev => ({ ...prev, duration: video.duration })); };
     const onVolume = () => { if (video) setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted })); };
-    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
-    const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
+    const onError = () => {
+      setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor', isLoading: false }));
+    };
+    const onCanPlay = () => setPlayerState(prev => ({ ...prev, isLoading: false, error: null }));
+    const onWaiting = () => setPlayerState(prev => ({ ...prev, isLoading: true }));
+    const onPlaying = () => setPlayerState(prev => ({ ...prev, isLoading: false }));
 
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -175,6 +219,8 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     video.addEventListener('volumechange', onVolume);
     video.addEventListener('error', onError);
     video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('playing', onPlaying);
 
     return () => {
       video.removeEventListener('play', onPlay);
@@ -184,6 +230,8 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       video.removeEventListener('volumechange', onVolume);
       video.removeEventListener('error', onError);
       video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('playing', onPlaying);
     };
   }, []);
 
@@ -207,7 +255,28 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     };
   }, []);
 
-  const togglePlay = () => { if (videoRef.current) { playerState.isPlaying ? videoRef.current.pause() : videoRef.current.play().catch(() => {}); resetControlsTimer(); } };
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (playerState.isPlaying) { video.pause(); }
+    else { 
+      setPlayerState(prev => ({ ...prev, error: null }));
+      video.play().catch(() => {}); 
+    }
+    resetControlsTimer();
+  };
+
+  const retryPlay = () => {
+    setPlayerState(prev => ({ ...prev, error: null, isLoading: true }));
+    if (videoRef.current && currentChannel?.url) {
+      videoRef.current.src = currentChannel.url;
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {
+        setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' }));
+      });
+    }
+  };
+
   const toggleMute = () => { if (videoRef.current) { videoRef.current.muted = !playerState.isMuted; resetControlsTimer(); } };
   const toggleFullscreen = () => { document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen(); resetControlsTimer(); };
   const skipTime = (s: number) => { if (videoRef.current && videoRef.current.duration) { videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration, videoRef.current.currentTime + s)); resetControlsTimer(); } };
@@ -277,17 +346,28 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     <div className="space-y-2">
       {/* PLAYER */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video ref={videoRef} className="w-full h-full object-contain" playsInline />
+        <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay />
 
-        {!playerState.isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={togglePlay}>
-            <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
-              <span className="text-3xl">{playerState.error ? '🔄' : '▶️'}</span>
-            </div>
-            {playerState.error && <p className="absolute mt-24 text-gray-300 text-xs">{playerState.error}</p>}
+        {/* YÜKLENİYOR */}
+        {playerState.isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/30 pointer-events-none">
+            <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
           </div>
         )}
 
+        {/* PLAY BUTONU / HATA */}
+        {!playerState.isPlaying && !playerState.isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={playerState.error ? retryPlay : togglePlay}>
+            <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
+              <span className="text-3xl">{playerState.error ? '🔄' : '▶️'}</span>
+            </div>
+            {playerState.error && (
+              <p className="absolute mt-24 text-gray-300 text-xs text-center px-4">{playerState.error}</p>
+            )}
+          </div>
+        )}
+
+        {/* ÜST BAR */}
         <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
           {onBack ? <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button> : <div />}
           <button onClick={(e) => { e.stopPropagation(); handleShare(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70 flex items-center gap-1.5">
@@ -295,6 +375,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           </button>
         </div>
 
+        {/* ALT KONTROLLER */}
         <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pt-10 sm:pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           {!playerState.isLive && (
             <div className="mb-2 sm:mb-3"><div className="relative h-1.5 sm:h-2 bg-gray-600/50 rounded-full cursor-pointer" onClick={handleSeek}><div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }} /></div>
@@ -315,7 +396,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* BANNER REKLAM */}
+      {/* REKLAM */}
       <div className="bg-[#1a1a1a] border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-red-500/10 border-b border-gray-700/30">
           <div className="flex items-center gap-3"><span className="text-2xl">🎁</span><div><p className="text-xs text-white font-semibold">Bu yayınları ücretsiz izliyorsun!</p><p className="text-[10px] text-yellow-400/80 mt-0.5">Bize destek olmak için aşağıdaki reklama tıklar mısın? ✨</p></div></div>
