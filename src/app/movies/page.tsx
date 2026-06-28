@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
-import VidPlayer from '@/components/Player/VidPlayer';
+import VidPlayer from '@/components/Player/VideoPlayer';
 import { useStore } from '@/store/useStore';
 import { FiFilm, FiChevronRight, FiSearch, FiX } from 'react-icons/fi';
 import { motion } from 'framer-motion';
