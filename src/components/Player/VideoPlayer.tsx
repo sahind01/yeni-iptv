@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck, FiLoader } from 'react-icons/fi';
+import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
 import { db } from '@/services/firebase';
 
@@ -15,27 +15,11 @@ interface Message {
 
 const MAX_MESSAGES = 15;
 
-// CORS proxy listesi - sırayla dener
-const CORS_PROXIES = [
-  'https://corsproxy.io/?',
-  'https://api.allorigins.win/raw?url=',
-  'https://cors-anywhere.herokuapp.com/',
-];
-
 export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const controlsTimer = useRef<NodeJS.Timeout | null>(null);
   const adRef1 = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
-  const hlsInstanceRef = useRef<any>(null);
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { currentChannel } = useStore();
-
-  const [playerState, setPlayerState] = useState({
-    isPlaying: false, isMuted: false, volume: 1, currentTime: 0, duration: 0,
-    error: null as string | null, showControls: true, isLive: true, isLoading: true,
-  });
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [nick, setNick] = useState('');
@@ -84,220 +68,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
-  // ==================== YENİ PLAYER ====================
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !currentChannel?.url) return;
-
-    const url = currentChannel.url;
-    
-    // Temizlik
-    cleanupPlayer();
-    setPlayerState(prev => ({ ...prev, error: null, isLoading: true }));
-
-    // URL'yi kontrol et
-    const urlLower = url.toLowerCase();
-    const isHLS = urlLower.includes('.m3u8');
-    const isDirectVideo = urlLower.includes('.mp4') || urlLower.includes('.ts') || 
-                          urlLower.includes('.mkv') || urlLower.includes('.webm') || 
-                          urlLower.includes('.avi') || urlLower.includes('.mov');
-
-    // Önce direkt dene, olmazsa proxy ile dene
-    tryDirectPlay(url, 0);
-
-    function tryDirectPlay(playUrl: string, proxyIndex: number) {
-      if (!video) return;
-
-      // Önceki instance'ı temizle
-      cleanupPlayer();
-
-      if (isHLS) {
-        // HLS oynatma
-        import('hls.js').then(({ default: Hls }) => {
-          if (Hls.isSupported() && video) {
-            const hls = new Hls({
-              enableWorker: true,
-              lowLatencyMode: true,
-              maxBufferLength: 60,
-              manifestLoadingTimeOut: 20000,
-              manifestLoadingMaxRetry: 3,
-              fragLoadingTimeOut: 30000,
-              fragLoadingMaxRetry: 5,
-              startLevel: -1,
-              autoStartLoad: true,
-            });
-
-            hlsInstanceRef.current = hls;
-            hls.loadSource(playUrl);
-            hls.attachMedia(video);
-
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              setPlayerState(prev => ({ ...prev, isLoading: false, error: null }));
-              video.play().catch(() => {});
-            });
-
-            hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
-              if (data.fatal) {
-                // HLS hatası - proxy dene
-                if (proxyIndex < CORS_PROXIES.length) {
-                  tryDirectPlay(CORS_PROXIES[proxyIndex] + encodeURIComponent(url), proxyIndex + 1);
-                } else {
-                  // Direkt video olarak dene
-                  tryDirectVideo(playUrl);
-                }
-              }
-            });
-          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = playUrl;
-            video.play().catch(() => tryDirectVideo(playUrl));
-          }
-        }).catch(() => {
-          tryDirectVideo(playUrl);
-        });
-      } else {
-        tryDirectVideo(playUrl);
-      }
-    }
-
-    function tryDirectVideo(playUrl: string) {
-      if (!video) return;
-      video.src = playUrl;
-      video.load();
-      
-      video.play()
-        .then(() => {
-          setPlayerState(prev => ({ ...prev, isLoading: false, error: null }));
-        })
-        .catch(() => {
-          // Proxy ile dene
-          if (proxyIndex < CORS_PROXIES.length && !isDirectVideo) {
-            tryDirectPlay(CORS_PROXIES[proxyIndex] + encodeURIComponent(url), proxyIndex + 1);
-          } else {
-            setPlayerState(prev => ({ 
-              ...prev, 
-              isLoading: false, 
-              error: 'Yayın açılamadı. Tekrar deneyin.',
-            }));
-          }
-        });
-    }
-
-    function cleanupPlayer() {
-      if (hlsInstanceRef.current) {
-        hlsInstanceRef.current.destroy();
-        hlsInstanceRef.current = null;
-      }
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
-    }
-
-    return () => cleanupPlayer();
-  }, [currentChannel?.url]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const onPlay = () => setPlayerState(prev => ({ ...prev, isPlaying: true, error: null, isLoading: false }));
-    const onPause = () => setPlayerState(prev => ({ ...prev, isPlaying: false }));
-    const onTimeUpdate = () => { if (video) setPlayerState(prev => ({ ...prev, currentTime: video.currentTime })); };
-    const onDuration = () => { if (video) setPlayerState(prev => ({ ...prev, duration: video.duration })); };
-    const onVolume = () => { if (video) setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted })); };
-    const onError = () => {
-      setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor', isLoading: false }));
-    };
-    const onCanPlay = () => setPlayerState(prev => ({ ...prev, isLoading: false, error: null }));
-    const onWaiting = () => setPlayerState(prev => ({ ...prev, isLoading: true }));
-    const onPlaying = () => setPlayerState(prev => ({ ...prev, isLoading: false }));
-
-    video.addEventListener('play', onPlay);
-    video.addEventListener('pause', onPause);
-    video.addEventListener('timeupdate', onTimeUpdate);
-    video.addEventListener('durationchange', onDuration);
-    video.addEventListener('volumechange', onVolume);
-    video.addEventListener('error', onError);
-    video.addEventListener('canplay', onCanPlay);
-    video.addEventListener('waiting', onWaiting);
-    video.addEventListener('playing', onPlaying);
-
-    return () => {
-      video.removeEventListener('play', onPlay);
-      video.removeEventListener('pause', onPause);
-      video.removeEventListener('timeupdate', onTimeUpdate);
-      video.removeEventListener('durationchange', onDuration);
-      video.removeEventListener('volumechange', onVolume);
-      video.removeEventListener('error', onError);
-      video.removeEventListener('canplay', onCanPlay);
-      video.removeEventListener('waiting', onWaiting);
-      video.removeEventListener('playing', onPlaying);
-    };
-  }, []);
-
-  const resetControlsTimer = () => {
-    if (controlsTimer.current) clearTimeout(controlsTimer.current);
-    setPlayerState(prev => ({ ...prev, showControls: true }));
-    controlsTimer.current = setTimeout(() => { setPlayerState(prev => ({ ...prev, showControls: false })); }, 5000);
-  };
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const show = () => resetControlsTimer();
-    container.addEventListener('mousemove', show);
-    container.addEventListener('touchstart', show);
-    container.addEventListener('click', show);
-    return () => {
-      container.removeEventListener('mousemove', show);
-      container.removeEventListener('touchstart', show);
-      container.removeEventListener('click', show);
-    };
-  }, []);
-
-  const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (playerState.isPlaying) { video.pause(); }
-    else { 
-      setPlayerState(prev => ({ ...prev, error: null }));
-      video.play().catch(() => {}); 
-    }
-    resetControlsTimer();
-  };
-
-  const retryPlay = () => {
-    setPlayerState(prev => ({ ...prev, error: null, isLoading: true }));
-    if (videoRef.current && currentChannel?.url) {
-      videoRef.current.src = currentChannel.url;
-      videoRef.current.load();
-      videoRef.current.play().catch(() => {
-        setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' }));
-      });
-    }
-  };
-
-  const toggleMute = () => { if (videoRef.current) { videoRef.current.muted = !playerState.isMuted; resetControlsTimer(); } };
-  const toggleFullscreen = () => { document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen(); resetControlsTimer(); };
-  const skipTime = (s: number) => { if (videoRef.current && videoRef.current.duration) { videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration, videoRef.current.currentTime + s)); resetControlsTimer(); } };
-
-  const formatTime = (t: number) => {
-    if (!isFinite(t) || t < 0) return '0:00';
-    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!videoRef.current || !playerState.duration) return;
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    videoRef.current.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * playerState.duration;
-    resetControlsTimer();
-  };
-
   const saveNick = () => { const n = nick.trim(); if (n.length < 2) return; localStorage.setItem('mutlu_chat_nick', n); setNick(n); setNickSet(true); };
-
   const cleanupOldMessages = async (channelId: string) => {
     const chatRef_db = ref(db, `chats/${channelId}`);
     const snapshot = await get(chatRef_db);
@@ -312,7 +83,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       }
     }
   };
-
   const sendMessage = async () => {
     if (!chatText.trim() || !nickSet || !currentChannel?.id) return;
     const channelId = currentChannel.id.replace(/[.#$\[\]]/g, '_');
@@ -320,15 +90,12 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     setChatText('');
     await cleanupOldMessages(channelId);
   };
-
   const deleteMessage = async (msgId: string) => {
     if (!isAdmin || !currentChannel?.id) return;
     const channelId = currentChannel.id.replace(/[.#$\[\]]/g, '_');
     await remove(ref(db, `chats/${channelId}/${msgId}`));
   };
-
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') { if (!nickSet) saveNick(); else sendMessage(); } };
-
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({ title: currentChannel?.name || 'Mutlu Player', text: `📺 ${currentChannel?.name} kanalını izliyorum! Sen de katıl! 🎉`, url: window.location.href })
@@ -336,64 +103,35 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     } else { navigator.clipboard.writeText(window.location.href); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); }
   };
 
-  const progress = playerState.duration > 0 ? (playerState.currentTime / playerState.duration) * 100 : 0;
-
   if (!currentChannel) {
     return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
   }
 
+  // THEOplayer iframe URL'si
+  const theoPlayerUrl = `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(currentChannel.url)}`;
+
   return (
     <div className="space-y-2">
-      {/* PLAYER */}
+      {/* PLAYER - THEOplayer İFRAME */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay />
-
-        {/* YÜKLENİYOR */}
-        {playerState.isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/30 pointer-events-none">
-            <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+        {onBack && (
+          <div className="absolute top-3 left-3 z-30">
+            <button onClick={onBack} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button>
           </div>
         )}
-
-        {/* PLAY BUTONU / HATA */}
-        {!playerState.isPlaying && !playerState.isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={playerState.error ? retryPlay : togglePlay}>
-            <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
-              <span className="text-3xl">{playerState.error ? '🔄' : '▶️'}</span>
-            </div>
-            {playerState.error && (
-              <p className="absolute mt-24 text-gray-300 text-xs text-center px-4">{playerState.error}</p>
-            )}
-          </div>
-        )}
-
-        {/* ÜST BAR */}
-        <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
-          {onBack ? <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button> : <div />}
-          <button onClick={(e) => { e.stopPropagation(); handleShare(); }} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70 flex items-center gap-1.5">
+        <div className="absolute top-3 right-3 z-30">
+          <button onClick={handleShare} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70 flex items-center gap-1.5">
             {shareCopied ? <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></> : <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>}
           </button>
         </div>
-
-        {/* ALT KONTROLLER */}
-        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pt-10 sm:pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-          {!playerState.isLive && (
-            <div className="mb-2 sm:mb-3"><div className="relative h-1.5 sm:h-2 bg-gray-600/50 rounded-full cursor-pointer" onClick={handleSeek}><div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }} /></div>
-              <div className="flex justify-between mt-1"><span className="text-[9px] sm:text-[10px] text-gray-400">{formatTime(playerState.currentTime)}</span><span className="text-[9px] sm:text-[10px] text-gray-400">{formatTime(playerState.duration)}</span></div></div>
-          )}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-1 sm:space-x-2">
-              {!playerState.isLive && <button onClick={() => skipTime(-10)} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-xs sm:text-sm">⏪</button>}
-              <button onClick={togglePlay} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-base sm:text-lg">{playerState.isPlaying ? '⏸' : '▶️'}</button>
-              {!playerState.isLive && <button onClick={() => skipTime(10)} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-xs sm:text-sm">⏩</button>}
-              <button onClick={toggleMute} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg">{playerState.isMuted || playerState.volume === 0 ? '🔇' : '🔊'}</button>
-            </div>
-            <div className="flex items-center space-x-1 sm:space-x-2">
-              {!playerState.isLive && <span className="text-[9px] sm:text-xs text-gray-400">{formatTime(playerState.currentTime)} / {formatTime(playerState.duration)}</span>}
-              <button onClick={toggleFullscreen} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-base sm:text-lg">⛶</button>
-            </div>
-          </div>
-        </div>
+        
+        <iframe
+          src={theoPlayerUrl}
+          className="w-full h-full"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowFullScreen
+          title="Video Player"
+        />
       </div>
 
       {/* REKLAM */}
