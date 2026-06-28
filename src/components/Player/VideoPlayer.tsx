@@ -31,6 +31,7 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const [adminPin, setAdminPin] = useState('');
   const [adminPinError, setAdminPinError] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
+  const [playerType, setPlayerType] = useState<'theo' | 'vidmody' | 'iframe' | 'direct'>('theo');
 
   useEffect(() => {
     const savedNick = localStorage.getItem('mutlu_chat_nick');
@@ -65,6 +66,27 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       script.async = true;
       (window as any).atOptions = { 'key': '17d00916f28f83916acf6ce35dca6c88', 'format': 'iframe', 'height': 50, 'width': 320, 'params': {} };
       adRef1.current.appendChild(script);
+    }
+  }, [currentChannel?.url]);
+
+  useEffect(() => {
+    if (!currentChannel?.url) return;
+    
+    const url = currentChannel.url.toLowerCase();
+    
+    if (url.includes('vidmody.com')) {
+      setPlayerType('vidmody');
+    } else if (url.includes('.m3u8')) {
+      // IP tabanlı linkler için direkt iframe dene
+      if (url.match(/https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
+        setPlayerType('iframe');
+      } else {
+        setPlayerType('theo');
+      }
+    } else if (url.includes('.mp4') || url.includes('.ts') || url.includes('.mkv') || url.includes('.webm')) {
+      setPlayerType('direct');
+    } else {
+      setPlayerType('iframe');
     }
   }, [currentChannel?.url]);
 
@@ -107,12 +129,23 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
   }
 
-  // Eğer URL .m3u8 ise THEOplayer kullan, değilse direkt iframe
-  const isHLS = currentChannel.url.toLowerCase().includes('.m3u8');
-  
-  const playerUrl = isHLS 
-    ? `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(currentChannel.url)}`
-    : currentChannel.url;
+  const getPlayerSrc = () => {
+    const url = currentChannel.url;
+    
+    switch (playerType) {
+      case 'theo':
+        return `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(url)}`;
+      case 'vidmody':
+        return url;
+      case 'iframe':
+        // IP tabanlı HLS için direkt iframe
+        return url;
+      case 'direct':
+        return url;
+      default:
+        return url;
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -129,21 +162,21 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
           </button>
         </div>
 
-        {isHLS ? (
-          <iframe
-            src={playerUrl}
-            className="w-full h-full"
-            allow="autoplay; fullscreen; encrypted-media"
-            allowFullScreen
-            title="Video Player"
+        {playerType === 'direct' ? (
+          <video
+            src={currentChannel.url}
+            className="w-full h-full object-contain"
+            playsInline
+            autoPlay
+            controls
           />
         ) : (
           <iframe
-            src={playerUrl}
+            src={getPlayerSrc()}
             className="w-full h-full"
-            allow="autoplay; fullscreen"
+            allow="autoplay; fullscreen; encrypted-media"
             allowFullScreen
-            sandbox="allow-scripts allow-same-origin"
+            sandbox={playerType === 'vidmody' ? 'allow-scripts allow-same-origin' : 'allow-scripts allow-same-origin allow-presentation'}
             title="Video Player"
           />
         )}
