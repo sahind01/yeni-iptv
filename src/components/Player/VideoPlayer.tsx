@@ -1,11 +1,10 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
 import { db } from '@/services/firebase';
-import { useEffect, useState } from 'react';
 
 interface Message {
   id: string;
@@ -108,15 +107,19 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
   }
 
-  // URL'yi temizle - sonda nokta varsa kaldır, boşlukları temizle
-  const cleanUrl = currentChannel.url.trim().replace(/\.$/, '').replace(/\s+/g, '');
+  // URL temizleme - sadece boşlukları ve gereksiz karakterleri temizle, .m3u8'e dokunma
+  let cleanUrl = currentChannel.url.trim();
+  // Eğer URL .m3u8 ile bitiyorsa ve sonunda fazladan nokta varsa onu düzelt
+  // .m3u8. -> .m3u8
+  cleanUrl = cleanUrl.replace(/\.m3u8\.+$/i, '.m3u8');
+  // Sondaki boşlukları temizle
+  cleanUrl = cleanUrl.trim();
   
-  // THEOplayer URL'si
   const playerUrl = `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(cleanUrl)}`;
 
   return (
     <div className="space-y-2">
-      {/* PLAYER - SADECE THEOplayer */}
+      {/* PLAYER - THEOplayer */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
         {onBack && (
           <div className="absolute top-3 left-3 z-30">
