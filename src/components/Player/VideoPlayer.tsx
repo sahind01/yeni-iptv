@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useStore } from '@/store/useStore';
 import { FiHeart, FiSend, FiUser, FiShield, FiTrash2, FiX, FiShare2, FiCheck } from 'react-icons/fi';
 import { ref, push, onValue, remove, get } from 'firebase/database';
 import { db } from '@/services/firebase';
+import { useEffect, useState } from 'react';
 
 interface Message {
   id: string;
@@ -31,7 +32,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
   const [adminPin, setAdminPin] = useState('');
   const [adminPinError, setAdminPinError] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
-  const [playerType, setPlayerType] = useState<'theo' | 'vidmody' | 'iframe' | 'direct'>('theo');
 
   useEffect(() => {
     const savedNick = localStorage.getItem('mutlu_chat_nick');
@@ -66,27 +66,6 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
       script.async = true;
       (window as any).atOptions = { 'key': '17d00916f28f83916acf6ce35dca6c88', 'format': 'iframe', 'height': 50, 'width': 320, 'params': {} };
       adRef1.current.appendChild(script);
-    }
-  }, [currentChannel?.url]);
-
-  useEffect(() => {
-    if (!currentChannel?.url) return;
-    
-    const url = currentChannel.url.toLowerCase();
-    
-    if (url.includes('vidmody.com')) {
-      setPlayerType('vidmody');
-    } else if (url.includes('.m3u8')) {
-      // IP tabanlı linkler için direkt iframe dene
-      if (url.match(/https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
-        setPlayerType('iframe');
-      } else {
-        setPlayerType('theo');
-      }
-    } else if (url.includes('.mp4') || url.includes('.ts') || url.includes('.mkv') || url.includes('.webm')) {
-      setPlayerType('direct');
-    } else {
-      setPlayerType('iframe');
     }
   }, [currentChannel?.url]);
 
@@ -129,27 +108,15 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
   }
 
-  const getPlayerSrc = () => {
-    const url = currentChannel.url;
-    
-    switch (playerType) {
-      case 'theo':
-        return `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(url)}`;
-      case 'vidmody':
-        return url;
-      case 'iframe':
-        // IP tabanlı HLS için direkt iframe
-        return url;
-      case 'direct':
-        return url;
-      default:
-        return url;
-    }
-  };
+  // URL'yi temizle - sonda nokta varsa kaldır, boşlukları temizle
+  const cleanUrl = currentChannel.url.trim().replace(/\.$/, '').replace(/\s+/g, '');
+  
+  // THEOplayer URL'si
+  const playerUrl = `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(cleanUrl)}`;
 
   return (
     <div className="space-y-2">
-      {/* PLAYER */}
+      {/* PLAYER - SADECE THEOplayer */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
         {onBack && (
           <div className="absolute top-3 left-3 z-30">
@@ -161,25 +128,14 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
             {shareCopied ? <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></> : <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>}
           </button>
         </div>
-
-        {playerType === 'direct' ? (
-          <video
-            src={currentChannel.url}
-            className="w-full h-full object-contain"
-            playsInline
-            autoPlay
-            controls
-          />
-        ) : (
-          <iframe
-            src={getPlayerSrc()}
-            className="w-full h-full"
-            allow="autoplay; fullscreen; encrypted-media"
-            allowFullScreen
-            sandbox={playerType === 'vidmody' ? 'allow-scripts allow-same-origin' : 'allow-scripts allow-same-origin allow-presentation'}
-            title="Video Player"
-          />
-        )}
+        
+        <iframe
+          src={playerUrl}
+          className="w-full h-full"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowFullScreen
+          title="Video Player"
+        />
       </div>
 
       {/* REKLAM */}
