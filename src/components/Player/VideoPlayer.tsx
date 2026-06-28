@@ -107,12 +107,16 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
   }
 
-  // THEOplayer iframe URL'si
-  const theoPlayerUrl = `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(currentChannel.url)}`;
+  // Eğer URL .m3u8 ise THEOplayer kullan, değilse direkt iframe
+  const isHLS = currentChannel.url.toLowerCase().includes('.m3u8');
+  
+  const playerUrl = isHLS 
+    ? `https://cdn.theoplayer.com/demos/iframe/theoplayer.html?autoplay=true&muted=false&preload=auto&src=${encodeURIComponent(currentChannel.url)}`
+    : currentChannel.url;
 
   return (
     <div className="space-y-2">
-      {/* PLAYER - THEOplayer İFRAME */}
+      {/* PLAYER */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
         {onBack && (
           <div className="absolute top-3 left-3 z-30">
@@ -124,14 +128,25 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
             {shareCopied ? <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></> : <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>}
           </button>
         </div>
-        
-        <iframe
-          src={theoPlayerUrl}
-          className="w-full h-full"
-          allow="autoplay; fullscreen; encrypted-media"
-          allowFullScreen
-          title="Video Player"
-        />
+
+        {isHLS ? (
+          <iframe
+            src={playerUrl}
+            className="w-full h-full"
+            allow="autoplay; fullscreen; encrypted-media"
+            allowFullScreen
+            title="Video Player"
+          />
+        ) : (
+          <iframe
+            src={playerUrl}
+            className="w-full h-full"
+            allow="autoplay; fullscreen"
+            allowFullScreen
+            sandbox="allow-scripts allow-same-origin"
+            title="Video Player"
+          />
+        )}
       </div>
 
       {/* REKLAM */}
