@@ -16,10 +16,16 @@ interface Message {
 const MAX_MESSAGES = 15;
 
 export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const adRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const { currentChannel } = useStore();
+
+  const [playerState, setPlayerState] = useState({
+    isPlaying: false, isMuted: false, volume: 1, currentTime: 0, duration: 0,
+    error: null as string | null, showControls: true, isLive: true,
+  });
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [nick, setNick] = useState('');
@@ -68,6 +74,120 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     }
   }, [currentChannel?.url]);
 
+  // EXO PLAYER - HLS + MP4 + TS + MKV + WEBM HEPSİ
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !currentChannel?.url) return;
+
+    const url = currentChannel.url.trim();
+    const isHLS = url.includes('.m3u8');
+    
+    setPlayerState(prev => ({ ...prev, error: null }));
+
+    // HLS için Hls.js yükle
+    if (isHLS) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+      script.onload = () => {
+        const Hls = (window as any).Hls;
+        if (Hls && Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            maxBufferLength: 60,
+            maxMaxBufferLength: 300,
+          });
+          hls.loadSource(url);
+          hls.attachMedia(video);
+          hls.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
+            video.play().catch(() => {});
+            setPlayerState(prev => ({ ...prev, error: null }));
+          });
+          hls.on((window as any).Hls.Events.ERROR, () => {
+            // HLS hatası - direkt dene
+            video.src = url;
+            video.load();
+            video.play().catch(() => {
+              setPlayerState(prev => ({ ...prev, error: 'Yayın açılamadı' }));
+            });
+          });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = url;
+          video.load();
+          video.play().catch(() => {});
+        } else {
+          video.src = url;
+          video.load();
+          video.play().catch(() => {});
+        }
+      };
+      document.head.appendChild(script);
+    } else {
+      // MP4, TS, MKV, WEBM vs direkt
+      video.src = url;
+      video.load();
+      video.play().catch(() => {
+        setPlayerState(prev => ({ ...prev, error: 'Başlatmak için tıklayın ▶️' }));
+      });
+    }
+
+    return () => {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    };
+  }, [currentChannel?.url]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onPlay = () => setPlayerState(prev => ({ ...prev, isPlaying: true, error: null }));
+    const onPause = () => setPlayerState(prev => ({ ...prev, isPlaying: false }));
+    const onTimeUpdate = () => { if (video) setPlayerState(prev => ({ ...prev, currentTime: video.currentTime })); };
+    const onDuration = () => { if (video) setPlayerState(prev => ({ ...prev, duration: video.duration })); };
+    const onVolume = () => { if (video) setPlayerState(prev => ({ ...prev, volume: video.volume, isMuted: video.muted })); };
+    const onError = () => setPlayerState(prev => ({ ...prev, error: 'Yayın geçici olarak kullanılamıyor' }));
+    const onCanPlay = () => setPlayerState(prev => ({ ...prev, error: null }));
+
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('durationchange', onDuration);
+    video.addEventListener('volumechange', onVolume);
+    video.addEventListener('error', onError);
+    video.addEventListener('canplay', onCanPlay);
+
+    return () => {
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('durationchange', onDuration);
+      video.removeEventListener('volumechange', onVolume);
+      video.removeEventListener('error', onError);
+      video.removeEventListener('canplay', onCanPlay);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (playerState.isPlaying) { video.pause(); }
+    else { video.play().catch(() => {}); }
+  };
+
+  const toggleMute = () => { if (videoRef.current) { videoRef.current.muted = !playerState.isMuted; } };
+  const toggleFullscreen = () => { document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen(); };
+
+  const formatTime = (t: number) => {
+    if (!isFinite(t) || t < 0) return '0:00';
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const progress = playerState.duration > 0 ? (playerState.currentTime / playerState.duration) * 100 : 0;
+
   const saveNick = () => { const n = nick.trim(); if (n.length < 2) return; localStorage.setItem('mutlu_chat_nick', n); setNick(n); setNickSet(true); };
   const cleanupOldMessages = async (channelId: string) => {
     const chatRef_db = ref(db, `chats/${channelId}`);
@@ -107,35 +227,39 @@ export default function VideoPlayer({ onBack }: { onBack?: () => void }) {
     return <div className="flex items-center justify-center h-48 bg-[#111] rounded-xl"><p className="text-gray-500">Kanal seçilmedi</p></div>;
   }
 
-  // EXO Player tarzı - Proxy üzerinden oynat
-  const url = currentChannel.url.trim();
-  
-  // CORS proxy ile oynat - en çok işe yarayan yöntem
-  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-
   return (
     <div className="space-y-2">
-      {/* EXO PLAYER - VIDEO ELEMENT */}
       <div ref={containerRef} className="relative w-full bg-black overflow-hidden rounded-xl" style={{ aspectRatio: '16/9' }}>
-        {onBack && (
-          <div className="absolute top-3 left-3 z-30">
-            <button onClick={onBack} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button>
+        <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay />
+
+        {!playerState.isPlaying && (
+          <div className="absolute inset-0 flex items-center justify-center z-20 cursor-pointer" onClick={togglePlay}>
+            <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
+              <span className="text-3xl">{playerState.error ? '🔄' : '▶️'}</span>
+            </div>
           </div>
         )}
-        <div className="absolute top-3 right-3 z-30">
+
+        <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between">
+          {onBack ? <button onClick={onBack} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70">← Geri</button> : <div />}
           <button onClick={handleShare} className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg text-sm hover:bg-black/70 flex items-center gap-1.5">
             {shareCopied ? <><FiCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-xs text-green-400">Kopyalandı!</span></> : <><FiShare2 className="w-3.5 h-3.5" /><span className="text-xs">Paylaş</span></>}
           </button>
         </div>
 
-        <video
-          src={proxyUrl}
-          className="w-full h-full object-contain"
-          playsInline
-          autoPlay
-          controls
-          crossOrigin="anonymous"
-        />
+        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pt-10 sm:pt-12 z-20 transition-opacity duration-300 ${playerState.showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          {!playerState.isLive && (
+            <div className="mb-2"><div className="relative h-1.5 bg-gray-600/50 rounded-full"><div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }} /></div>
+              <div className="flex justify-between mt-1"><span className="text-[9px] text-gray-400">{formatTime(playerState.currentTime)}</span><span className="text-[9px] text-gray-400">{formatTime(playerState.duration)}</span></div></div>
+          )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <button onClick={togglePlay} className="p-2 hover:bg-white/10 rounded-lg">{playerState.isPlaying ? '⏸' : '▶️'}</button>
+              <button onClick={toggleMute} className="p-2 hover:bg-white/10 rounded-lg">{playerState.isMuted ? '🔇' : '🔊'}</button>
+            </div>
+            <button onClick={toggleFullscreen} className="p-2 hover:bg-white/10 rounded-lg">⛶</button>
+          </div>
+        </div>
       </div>
 
       {/* REKLAM */}
