@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const searchQuery = searchParams.get('search') || '';
 
   try {
-    const res = await fetch('https://iptv-epg.org/files/epg-tr.xml.gz', {
+    const res = await fetch('https://www.open-epg.com/files/turkey1.xml', {
       signal: AbortSignal.timeout(20000)
     });
     
