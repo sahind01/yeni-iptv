@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const searchQuery = searchParams.get('search') || '';
 
   try {
-    const res = await fetch('https://www.open-epg.com/files/turkey1.xml', {
+    const res = await fetch('https://raw.githubusercontent.com/OwnerPlugins/vavoo-player/refs/heads/master/epg_tr.xml', {
       signal: AbortSignal.timeout(20000)
     });
     
