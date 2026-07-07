@@ -40,7 +40,7 @@ export default function LoginPage() {
       const password = formData.password.trim();
       const site = formData.site.trim() || 'IPTV';
 
-      const apiUrl = `https://mutlu-iptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+      const apiUrl = `https://mutluiptv.vercel.app/api/m3u?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Kullanıcı adı veya şifre hatalı');
 
